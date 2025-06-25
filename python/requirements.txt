@@ -1,5 +1,2 @@
 Flask==2.3.3
 APScheduler==3.10.4
-watchdog==3.0.0
-python-dotenv==1.0.0
-Werkzeug==2.3.7

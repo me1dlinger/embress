@@ -13,8 +13,8 @@ import datetime
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 
-LOGS_DIR = r'app/python/logs'
-MEDIA_DIR = os.getenv('MEDIA_PATH', r'app/media')
+LOGS_DIR = r'/app/python/logs'
+MEDIA_DIR = os.getenv('MEDIA_PATH', r'/app/media')
 
 
 class EmbyRenamer:
@@ -175,19 +175,23 @@ class EmbyRenamer:
                                             'error': str(e)})
         return changes
 
-    def _save_change_record(self, season_dir: Path, changes: List[Dict]):
+    def _save_change_record(self, season_dir: Path, media_type: str, changes: List[Dict]):
+        """保存变更记录，添加媒体类型信息"""
         if not changes:
             return
+            
         record = season_dir / 'rename_record.json'
         try:
-            existing = json.load(open(record, 'r', encoding='utf-8')) if record.exists() else []
+            existing = json.loads(record.read_text(encoding='utf-8')) if record.exists() else []
         except Exception:
             existing = []
+            
         for c in changes:
             c['timestamp'] = datetime.datetime.now().isoformat()
-            existing.append(c)
-        json.dump(existing, open(record, 'w', encoding='utf-8'),
-                  ensure_ascii=False, indent=2)
+            c['media_type'] = media_type  # 添加媒体类型信息
+            
+        existing.extend(changes)
+        record.write_text(json.dumps(existing, ensure_ascii=False, indent=2), encoding='utf-8')
     def scan_and_rename(self) -> Dict:
         total, renamed = 0, 0
         if not self.media_path.exists():
@@ -197,33 +201,46 @@ class EmbyRenamer:
 
         video_exts = {'.mkv', '.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm', '.ts', '.m2ts'}
 
-        for show in self.media_path.iterdir():
-            if not show.is_dir():
+        # 扫描主目录下的所有子目录（媒体类型目录）
+        for media_type_dir in self.media_path.iterdir():
+            if not media_type_dir.is_dir():
                 continue
-            for season_dir in show.iterdir():
-                if not season_dir.is_dir():
+                
+            # 扫描媒体类型目录下的所有节目目录
+            for show in media_type_dir.iterdir():
+                if not show.is_dir():
                     continue
-                season_num_path = self._get_season_from_path(season_dir)
+                    
+                # 扫描节目目录下的所有季目录
+                for season_dir in show.iterdir():
+                    if not season_dir.is_dir():
+                        continue
+                        
+                    # 从季目录路径中提取季信息
+                    season_num_path = self._get_season_from_path(season_dir)
+                    season_changes: List[Dict] = []
+                    
+                    # 处理季目录下的视频文件
+                    for f in season_dir.iterdir():
+                        if not f.is_file() or f.suffix.lower() not in video_exts:
+                            continue
+                            
+                        total += 1
+                        info = self._extract_episode_info(f.name)
+                        if info is None:
+                            continue
+                            
+                        season, ep = info
+                        season = season if season is not None else season_num_path
+                        new_name = self._generate_new_filename(f.name, season, ep)
+                        
+                        if new_name != f.name:
+                            season_changes.extend(self._rename_file_and_subtitles(f, new_name))
+                            renamed += 1
 
-                season_changes: List[Dict] = []
-                for f in season_dir.iterdir():
-                    if not f.is_file() or f.suffix.lower() not in video_exts:
-                        continue
-                    total += 1
-                    info = self._extract_episode_info(f.name)
-                    if info is None:
-                        continue
-                    season, ep = info
-                    season = season if season is not None else season_num_path
-                    new_name = self._generate_new_filename(f.name, season, ep)
-                    if new_name == f.name:
-                        continue
-                    season_changes.extend(self._rename_file_and_subtitles(f, new_name))
-                    if any(c['status'] == 'success' for c in season_changes):
-                        renamed += 1
-
-                if season_changes:
-                    self._save_change_record(season_dir, season_changes)
+                    # 保存本季的变更记录
+                    if season_changes:
+                        self._save_change_record(season_dir, media_type_dir.name, season_changes)
 
         self.logger.info(f"扫描完成: 处理 {total} 个文件，重命名 {renamed} 个文件")
         return {'status': 'completed', 'processed': total,

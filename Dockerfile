@@ -18,8 +18,6 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime
 # 创建目录结构
 RUN mkdir -p /app/python
 RUN mkdir -p /app/media
-RUN mkdir -p /app/data
-
 
 # 复制脚本和API文件
 COPY /python /app/python
