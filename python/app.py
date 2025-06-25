@@ -18,7 +18,7 @@ from threading import Lock
 app = Flask(__name__)
 
 # 配置
-LOG_DIR = os.getenv("LOG_path", "/app/python/logs")
+LOG_DIR = os.getenv("LOG_PATH", "/app/python/log")
 MEDIA_PATH = os.getenv("MEDIA_PATH", "/app/media")
 ACCESS_KEY = os.getenv("ACCESS_KEY", "12345")
 SCAN_INTERVAL = int(os.getenv("SCAN_INTERVAL", 3600))
@@ -114,7 +114,8 @@ def get_status():
 @app.route("/api/history")
 def get_history():
     """获取扫描历史"""
-    return jsonify({"history": scan_history, "total": len(scan_history)})
+    sorted_history = sorted(scan_history, key=lambda x: x.get("timestamp", ""), reverse=True)
+    return jsonify({"history": sorted_history, "total": len(scan_history)})
 
 
 @app.route("/api/manual-scan", methods=["POST"])
@@ -142,6 +143,34 @@ def manual_scan():
 
         return jsonify({"success": False, "result": error_result})
 
+@app.route("/api/scan-directory", methods=["POST"])
+def scan_directory():
+    """扫描指定子目录（相对于 MEDIA_PATH）"""
+    global last_scan_result, scan_history
+
+    data = request.get_json(silent=True) or {}
+    sub_path = data.get("sub_path")
+    if not sub_path:
+        return jsonify({"success": False, "message": "sub_path"})
+
+    try:
+        app.logger.info(f"开始扫描子目录: {sub_path}")
+        result = renamer.scan_and_rename(sub_path=sub_path)
+        last_scan_result = result
+        scan_history.append(result)
+        scan_history = scan_history[-50:]
+        persist_history()
+        return jsonify({"success": True, "result": result})
+    except Exception as e:
+        app.logger.error(f"扫描子目录失败: {e}")
+        error_result = {
+            "status": "error",
+            "message": str(e),
+            "timestamp": datetime.now().isoformat(),
+            "target": sub_path,
+        }
+        last_scan_result = error_result
+        return jsonify({"success": False, "result": error_result}), 500
 
 @app.route("/api/logs")
 def get_logs():
@@ -189,41 +218,37 @@ def get_log_content(filename):
 
 @app.route("/api/change-records")
 def get_change_records():
-    """获取所有变更记录"""
+    """获取所有变更记录（排除 skip）"""
     records = []
     media_path = Path(MEDIA_PATH)
-
     if not media_path.exists():
         return jsonify({"records": []})
 
-    # 三层扫描：媒体类型 → 节目 → 季
     for media_type_dir in media_path.iterdir():
         if not media_type_dir.is_dir():
             continue
-
         for show_dir in media_type_dir.iterdir():
             if not show_dir.is_dir():
                 continue
-
             for season_dir in show_dir.iterdir():
                 if not season_dir.is_dir():
                     continue
-
                 record_file = season_dir / "rename_record.json"
-                if record_file.exists():
-                    try:
-                        with open(record_file, "r", encoding="utf-8") as f:
-                            season_records = json.load(f)
+                if not record_file.exists():
+                    continue
 
-                        for record in season_records:
-                            # 添加完整路径信息
-                            record["media_type"] = media_type_dir.name
-                            record["show"] = show_dir.name
-                            record["season"] = season_dir.name
-                            records.append(record)
-
-                    except Exception as e:
-                        app.logger.error(f"读取变更记录失败 {record_file}: {e}")
+                try:
+                    with open(record_file, "r", encoding="utf-8") as f:
+                        season_records = json.load(f)
+                    for rec in season_records:
+                        if rec.get("status") == "skip":
+                            continue              # ★ 排除 skip
+                        rec["media_type"] = media_type_dir.name
+                        rec["show"] = show_dir.name
+                        rec["season"] = season_dir.name
+                        records.append(rec)
+                except Exception as e:
+                    app.logger.error(f"读取变更记录失败 {record_file}: {e}")
 
     # 按时间排序
     records.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
@@ -234,7 +259,7 @@ def get_change_records():
 def setup_logging():
     """设置Flask应用日志"""
     if not app.debug:
-        log_dir = Path("/app/logs")
+        log_dir = Path(LOG_DIR)
         log_dir.mkdir(exist_ok=True)
 
         file_handler = logging.FileHandler(log_dir / "app.log", encoding="utf-8")

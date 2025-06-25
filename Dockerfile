@@ -23,13 +23,13 @@ RUN mkdir -p /app/media
 COPY /python /app/python
 COPY conf/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 RUN chmod +x /app/python/app.py
-RUN chmod +x /app/python/renamer.py
+RUN chmod +x /app/python/emby_renamer.py
 
 RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
 
 RUN pip install --no-cache-dir -r /app/python/requirements.txt
 
-EXPOSE 5000
+EXPOSE 15000
 
 # 启动命令
 CMD ["supervisord", "-n", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
