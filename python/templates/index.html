@@ -1,0 +1,1252 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Emby文件重命名</title>
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.0/font/bootstrap-icons.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --primary: #3a86ff;
+        --primary-light: #4d96ff;
+        --secondary: #ff006e;
+        --accent: #ffbe0b;
+        --dark: #14213d;
+        --gray: #8d99ae;
+        --light: #edf2f4;
+        --card-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+        --card-hover-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+        --transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        --success: #06d6a0;
+        --error: #ef476f;
+        --warning: #ffd166;
+        --info: #118ab2;
+      }
+
+      body {
+        font-family: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI",
+          Roboto, sans-serif;
+        background-color: #f5f7fa;
+        color: #333;
+        line-height: 1.6;
+      }
+
+      .app-container {
+        max-width: 1600px;
+        margin: 0 auto;
+      }
+      /* 导航栏文字为白色 */
+      .navbar,
+      .navbar a,
+      .navbar span,
+      .navbar i {
+        color: white !important;
+      }
+
+      /* 添加悬浮效果增强视觉反馈 */
+      .navbar a:hover,
+      .navbar-brand:hover {
+        opacity: 0.9;
+        transform: translateY(-1px);
+        transition: all 0.2s ease;
+      }
+
+      /* 徽章样式也调整为白色 */
+      .badge {
+        color: white !important;
+      }
+
+      /* 导航栏悬停特效 */
+      .navbar-nav .nav-link {
+        position: relative;
+        padding-bottom: 5px;
+      }
+
+      .navbar-nav .nav-link::after {
+        content: "";
+        position: absolute;
+        bottom: 0;
+        left: 50%;
+        width: 0;
+        height: 2px;
+        background: white;
+        transition: all 0.3s ease;
+        transform: translateX(-50%);
+      }
+
+      .navbar-nav .nav-link:hover::after {
+        width: 60%;
+      }
+
+      /* 微调导航栏整体布局 */
+      .navbar {
+        background: #5dabf4;
+        padding: 10px 20px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+      }
+
+      .navbar-brand {
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        font-size: 1.2rem;
+      }
+
+      .navbar-brand i {
+        font-size: 1.4rem;
+        margin-right: 8px;
+        vertical-align: middle;
+      }
+
+      .navbar-toggler {
+        border-color: rgba(255, 255, 255, 0.5);
+      }
+
+      .navbar-toggler-icon {
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%28255, 255, 255, 0.8%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+      }
+
+      .auth-status {
+        font-size: 0.9rem;
+        font-weight: 500;
+      }
+
+      .auth-status .authenticated {
+        color: var(--success);
+      }
+
+      .auth-status .unauthenticated {
+        color: var(--gray);
+      }
+
+      /* 认证表单样式 */
+      .auth-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: calc(100vh - 70px);
+      }
+
+      .auth-form-container {
+        max-width: 480px;
+        width: 100%;
+        padding: 1.5rem;
+      }
+
+      .auth-card {
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: var(--card-shadow);
+        transform: translateY(0);
+        transition: var(--transition);
+        border: none;
+      }
+
+      .auth-card:hover {
+        box-shadow: var(--card-hover-shadow);
+        transform: translateY(-4px);
+      }
+
+      .auth-card-header {
+        background: linear-gradient(135deg, var(--primary) 0%, #2667ff 100%);
+        color: white;
+        padding: 1.5rem;
+        text-align: center;
+        font-weight: 700;
+      }
+
+      .auth-card-body {
+        padding: 2rem;
+      }
+
+      .auth-card .form-control {
+        border-radius: 8px;
+        padding: 0.75rem 1.25rem;
+        border: 1px solid #e0e4eb;
+        transition: var(--transition);
+        background-color: #fafbfd;
+      }
+
+      .auth-card .form-control:focus {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(58, 134, 255, 0.2);
+      }
+
+      /* 主要内容区域 */
+      .main-content {
+        padding: 2rem 1.5rem 3rem;
+      }
+
+      /* 卡片样式 */
+      .dashboard-card {
+        border: none;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: var(--card-shadow);
+        transition: var(--transition);
+        background: white;
+        margin-bottom: 1.5rem;
+      }
+
+      .dashboard-card:hover {
+        box-shadow: var(--card-hover-shadow);
+      }
+
+      .card-header {
+        background: linear-gradient(135deg, white 0%, #f8f9fa 100%);
+        padding: 1rem 1.5rem;
+        font-weight: 700;
+        font-size: 1.1rem;
+        border-bottom: 1px solid #e9ecef;
+        color: var(--dark);
+      }
+
+      .card-body {
+        padding: 1.5rem;
+      }
+
+      /* 状态卡片样式 */
+      .status-card {
+        border-left: 4px solid var(--primary);
+      }
+
+      .status-highlight {
+        font-weight: 700;
+        color: var(--primary);
+      }
+
+      /* 按钮样式 */
+      .btn {
+        border-radius: 8px;
+        padding: 0.65rem 1.5rem;
+        font-weight: 600;
+        letter-spacing: 0.4px;
+        transition: var(--transition);
+        border: none;
+      }
+
+      .btn-primary {
+        background: linear-gradient(135deg, var(--primary) 0%, #2667ff 100%);
+      }
+
+      .btn-primary:hover,
+      .btn-primary:focus {
+        background: linear-gradient(
+          135deg,
+          var(--primary-light) 0%,
+          #3a7cff 100%
+        );
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(58, 134, 255, 0.3);
+      }
+
+      .btn-success {
+        background: linear-gradient(135deg, var(--success) 0%, #05c793 100%);
+      }
+
+      .btn-info {
+        background: linear-gradient(135deg, var(--info) 0%, #0c7ca5 100%);
+      }
+
+      .btn-outline-primary {
+        border: 1px solid var(--primary);
+        color: var(--primary);
+      }
+
+      .btn-outline-primary:hover {
+        background-color: rgba(58, 134, 255, 0.1);
+      }
+
+      /* 标签页导航 */
+      .nav-tabs {
+        border-bottom: 1px solid #e9ecef;
+        margin-bottom: 1.5rem;
+      }
+
+      .nav-tabs .nav-link {
+        font-weight: 600;
+        border: none;
+        padding: 0.8rem 1.5rem;
+        color: var(--gray);
+        border-radius: 8px 8px 0 0;
+        background-color: transparent;
+      }
+
+      .nav-tabs .nav-link.active {
+        color: var(--primary);
+        background-color: transparent;
+        border-bottom: 3px solid var(--primary);
+      }
+
+      /* 日志内容 */
+      .log-content {
+        background-color: #1e1e2d;
+        border-radius: 8px;
+        color: #e2e8f0;
+        font-family: "Fira Code", "Courier New", monospace;
+        font-size: 13px;
+        max-height: 400px;
+        overflow-y: auto;
+        padding: 1.25rem;
+        line-height: 1.6;
+      }
+
+      .log-content pre {
+        margin: 0;
+      }
+
+      /* 变更记录样式 */
+      .record-item {
+        border-left: 3px solid var(--success);
+        padding-left: 15px;
+        margin-bottom: 15px;
+        transition: var(--transition);
+        background-color: white;
+        border-radius: 8px;
+        padding: 15px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+      }
+
+      .record-item.failed {
+        border-left-color: var(--error);
+      }
+
+      .record-item:hover {
+        transform: translateX(5px);
+        box-shadow: 0 5px 12px rgba(0, 0, 0, 0.08);
+      }
+
+      /* 历史记录卡片 */
+      .history-card {
+        border-radius: 10px;
+        margin-bottom: 1rem;
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.04);
+      }
+
+      .success-border {
+        border-left: 4px solid var(--success);
+      }
+
+      .error-border {
+        border-left: 4px solid var(--error);
+      }
+
+      /* 系统状态 */
+      .status-value {
+        font-weight: 600;
+        color: var(--dark);
+      }
+
+      /* 工具提示 */
+      .status-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(58, 134, 255, 0.1);
+        color: var(--primary);
+        font-size: 1.2rem;
+      }
+
+      /* 响应式调整 */
+      @media (max-width: 768px) {
+        .main-content {
+          padding: 1rem 1rem 2rem;
+        }
+
+        .log-files-list {
+          margin-bottom: 1rem;
+        }
+
+        .auth-card-body {
+          padding: 1.5rem;
+        }
+      }
+
+      /* 动画效果 */
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .animated {
+        animation: fadeIn 0.5s ease-out forwards;
+      }
+
+      .card-animated {
+        animation: fadeIn 0.4s ease-out forwards;
+      }
+
+      .delay-1 {
+        animation-delay: 0.1s;
+      }
+      .delay-2 {
+        animation-delay: 0.2s;
+      }
+      .delay-3 {
+        animation-delay: 0.3s;
+      }
+
+      /* 滚动条样式 */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+
+      ::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 4px;
+      }
+
+      ::-webkit-scrollbar-thumb {
+        background: var(--primary);
+        border-radius: 4px;
+      }
+
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--primary-light);
+      }
+
+      /* 状态徽章 */
+      .status-badge {
+        padding: 0.35rem 0.7rem;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+      }
+
+      /* 工具提示 */
+      .tooltip-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background-color: rgba(0, 0, 0, 0.07);
+        color: var(--gray);
+        font-size: 0.7rem;
+        margin-left: 5px;
+        cursor: help;
+        vertical-align: middle;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg">
+      <div class="container app-container">
+        <a class="navbar-brand" href="#">
+          <i class="bi bi-hdd-stack"></i> Emby 文件重命名
+        </a>
+        <div class="navbar-nav ms-auto" id="auth-status">
+          <span class="auth-status unauthenticated">未认证</span>
+        </div>
+      </div>
+    </nav>
+
+    <!-- 认证表单 -->
+    <div class="container app-container" id="auth-container">
+      <div class="auth-container">
+        <div class="auth-form-container animated">
+          <div class="card auth-card">
+            <div class="auth-card-header">
+              <h4><i class="bi bi-shield-lock me-2"></i>访问验证</h4>
+            </div>
+            <div class="auth-card-body">
+              <form id="auth-form">
+                <div class="mb-4">
+                  <label for="access-key" class="form-label fw-medium"
+                    >访问密钥</label
+                  >
+                  <input
+                    type="password"
+                    class="form-control"
+                    id="access-key"
+                    required
+                    autocomplete="off"
+                    placeholder="请输入您的访问密钥"
+                  />
+                </div>
+                <button type="submit" class="btn btn-primary w-100 btn-lg">
+                  <span
+                    class="spinner-border spinner-border-sm d-none"
+                    role="status"
+                  ></span>
+                  <span class="btn-text">验证</span>
+                </button>
+              </form>
+              <div
+                id="auth-error"
+                class="alert alert-danger mt-3 d-none py-2 border-0"
+              >
+                <i class="bi bi-exclamation-circle me-2"></i>
+                <span class="message"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 主内容区域 -->
+    <div class="container-fluid app-container authenticated" id="main-content">
+      <div class="row mt-4">
+        <div class="col-12">
+          <!-- 选项卡导航 -->
+          <ul class="nav nav-tabs" id="main-tabs" role="tablist">
+            <li class="nav-item" role="presentation">
+              <button
+                class="nav-link active"
+                id="dashboard-tab"
+                data-bs-toggle="tab"
+                data-bs-target="#dashboard"
+                type="button"
+                role="tab"
+              >
+                <i class="bi bi-speedometer2 me-2"></i> 仪表板
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button
+                class="nav-link"
+                id="history-tab"
+                data-bs-toggle="tab"
+                data-bs-target="#history"
+                type="button"
+                role="tab"
+              >
+                <i class="bi bi-clock-history me-2"></i> 扫描历史
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button
+                class="nav-link"
+                id="records-tab"
+                data-bs-toggle="tab"
+                data-bs-target="#records"
+                type="button"
+                role="tab"
+              >
+                <i class="bi bi-list-ul me-2"></i> 变更记录
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button
+                class="nav-link"
+                id="logs-tab"
+                data-bs-toggle="tab"
+                data-bs-target="#logs"
+                type="button"
+                role="tab"
+              >
+                <i class="bi bi-file-text me-2"></i> 日志查看
+              </button>
+            </li>
+          </ul>
+
+          <!-- 选项卡内容 -->
+          <div class="tab-content mt-4" id="main-tab-content">
+            <!-- 仪表板 -->
+            <div
+              class="tab-pane fade show active"
+              id="dashboard"
+              role="tabpanel"
+            >
+              <div class="row mt-4">
+                <div class="col-lg-8">
+                  <div class="dashboard-card status-card">
+                    <div class="card-header d-flex align-items-center">
+                      <i class="bi bi-info-circle me-2"></i>
+                      <span>系统状态</span>
+                      <button
+                        class="btn btn-sm btn-outline-primary ms-auto"
+                        id="refresh-status-btn"
+                      >
+                        <i class="bi bi-arrow-clockwise me-1"></i> 刷新
+                      </button>
+                    </div>
+                    <div class="card-body" id="system-status">
+                      <div class="d-flex justify-content-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                          <span class="visually-hidden">加载中...</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="col-lg-4">
+                  <div class="dashboard-card">
+                    <div class="card-header d-flex align-items-center">
+                      <i class="bi bi-gear me-2"></i>
+                      <span>操作面板</span>
+                    </div>
+                    <div class="card-body">
+                      <button
+                        class="btn btn-success w-100 mb-3"
+                        id="manual-scan-btn"
+                      >
+                        <i class="bi bi-search me-2"></i> 手动扫描
+                      </button>
+                      <div class="d-flex gap-2">
+                        <button
+                          class="btn btn-info flex-grow-1"
+                          id="logs-preview-btn"
+                        >
+                          <i class="bi bi-file-text me-2"></i> 查看日志
+                        </button>
+                        <button
+                          class="btn btn-secondary flex-grow-1"
+                          id="clear-logs-btn"
+                        >
+                          <i class="bi bi-trash me-2"></i> 清空
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="row mt-4">
+                <div class="col-12">
+                  <div class="dashboard-card">
+                    <div class="card-header d-flex align-items-center">
+                      <i class="bi bi-clock me-2"></i>
+                      <span>最近扫描结果</span>
+                    </div>
+                    <div class="card-body p-4" id="last-scan-result">
+                      <div
+                        class="d-flex flex-column align-items-center justify-content-center py-5"
+                      >
+                        <i
+                          class="bi bi-clock-history mb-3"
+                          style="font-size: 2.5rem; color: #ddd"
+                        ></i>
+                        <p class="text-muted">暂无扫描结果</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 扫描历史 -->
+            <div class="tab-pane fade" id="history" role="tabpanel">
+              <div class="row mt-4">
+                <div class="col-12">
+                  <div class="dashboard-card">
+                    <div
+                      class="card-header d-flex justify-content-between align-items-center"
+                    >
+                      <div class="d-flex align-items-center">
+                        <i class="bi bi-clock-history me-2"></i>
+                        <span>扫描历史</span>
+                      </div>
+                      <button
+                        class="btn btn-sm btn-outline-primary"
+                        id="refresh-history-btn"
+                      >
+                        <i class="bi bi-arrow-clockwise me-1"></i> 刷新
+                      </button>
+                    </div>
+                    <div class="card-body">
+                      <div id="history-content">
+                        <div class="d-flex justify-content-center py-5">
+                          <div
+                            class="spinner-border text-primary"
+                            role="status"
+                          >
+                            <span class="visually-hidden">加载中...</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 变更记录 -->
+            <div class="tab-pane fade" id="records" role="tabpanel">
+              <div class="row mt-4">
+                <div class="col-12">
+                  <div class="dashboard-card">
+                    <div
+                      class="card-header d-flex justify-content-between align-items-center"
+                    >
+                      <div class="d-flex align-items-center">
+                        <i class="bi bi-list-ul me-2"></i>
+                        <span>文件变更记录</span>
+                      </div>
+                      <button
+                        class="btn btn-sm btn-outline-primary"
+                        id="refresh-records-btn"
+                      >
+                        <i class="bi bi-arrow-clockwise me-1"></i> 刷新
+                      </button>
+                    </div>
+                    <div class="card-body">
+                      <div id="records-content">
+                        <div class="d-flex justify-content-center py-5">
+                          <div
+                            class="spinner-border text-primary"
+                            role="status"
+                          >
+                            <span class="visually-hidden">加载中...</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 日志查看 -->
+            <div class="tab-pane fade" id="logs" role="tabpanel">
+              <div class="row mt-4">
+                <div class="col-12">
+                  <div class="dashboard-card">
+                    <div
+                      class="card-header d-flex justify-content-between align-items-center"
+                    >
+                      <div class="d-flex align-items-center">
+                        <i class="bi bi-file-text me-2"></i>
+                        <span>日志文件</span>
+                      </div>
+                      <button
+                        class="btn btn-sm btn-outline-primary"
+                        id="refresh-logs-btn"
+                      >
+                        <i class="bi bi-arrow-clockwise me-1"></i> 刷新
+                      </button>
+                    </div>
+                    <div class="card-body">
+                      <div class="row">
+                        <div class="col-md-4">
+                          <div
+                            class="list-group log-files-list"
+                            id="log-files-list"
+                          >
+                            <div class="d-flex justify-content-center p-4">
+                              <div
+                                class="spinner-border spinner-border-sm text-primary"
+                                role="status"
+                              ></div>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="col-md-8">
+                          <div class="log-content rounded p-3" id="log-content">
+                            <p class="text-muted">请选择日志文件查看内容</p>
+                          </div>
+                          <div class="d-flex justify-content-end mt-3">
+                            <button
+                              class="btn btn-sm btn-outline-secondary me-2"
+                            >
+                              <i class="bi bi-search me-1"></i> 搜索
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger">
+                              <i class="bi bi-trash me-1"></i> 清空日志
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <script>
+      let isAuthenticated = false;
+
+      // 认证相关函数
+      async function authenticate(accessKey) {
+        try {
+          const response = await fetch("/api/auth", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ access_key: accessKey }),
+          });
+
+          const result = await response.json();
+          return result;
+        } catch (error) {
+          console.error("认证请求失败:", error);
+          return { success: false, message: "网络错误" };
+        }
+      }
+
+      // 显示认证后的界面
+      function showAuthenticatedContent() {
+        document.getElementById("auth-container").style.display = "none";
+        document.querySelectorAll(".authenticated").forEach((el) => {
+          el.style.display = "block";
+        });
+        document.getElementById("auth-status").innerHTML =
+          '<span class="navbar-text text-success"><i class="bi bi-check-circle"></i> 已验证</span>';
+
+        // 加载初始数据
+        loadSystemStatus();
+        loadHistory();
+        loadChangeRecords();
+        loadLogFiles();
+      }
+
+      // 系统状态相关函数
+      async function loadSystemStatus() {
+        try {
+          const response = await fetch("/api/status");
+          const data = await response.json();
+
+          let statusHtml = `
+                    <div class="row">
+                        <div class="col-6"><strong>媒体路径:</strong></div>
+                        <div class="col-6">${data.media_path}</div>
+                    </div>
+                    <div class="row mt-2">
+                        <div class="col-6"><strong>扫描间隔:</strong></div>
+                        <div class="col-6">${data.scan_interval} 秒</div>
+                    </div>
+                    <div class="row mt-2">
+                        <div class="col-6"><strong>调度器状态:</strong></div>
+                        <div class="col-6">
+                            <span class="badge ${
+                              data.scheduler_running
+                                ? "bg-success"
+                                : "bg-danger"
+                            }">
+                                ${data.scheduler_running ? "运行中" : "已停止"}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="row mt-2">
+                        <div class="col-6"><strong>总扫描次数:</strong></div>
+                        <div class="col-6">${data.total_scans}</div>
+                    </div>
+                `;
+
+          document.getElementById("system-status").innerHTML = statusHtml;
+
+          // 显示最近扫描结果
+          if (data.last_scan) {
+            displayLastScanResult(data.last_scan);
+          }
+        } catch (error) {
+          console.error("加载系统状态失败:", error);
+          document.getElementById("system-status").innerHTML =
+            '<div class="alert alert-danger">加载失败</div>';
+        }
+      }
+
+      function displayLastScanResult(result) {
+        let statusClass = "success";
+        let statusIcon = "check-circle";
+
+        if (result.status === "error") {
+          statusClass = "danger";
+          statusIcon = "x-circle";
+        }
+
+        const html = `
+                <div class="alert alert-${statusClass}">
+                    <h6><i class="bi bi-${statusIcon}"></i> ${
+          result.status === "error" ? "扫描失败" : "扫描完成"
+        }</h6>
+                    <p class="mb-2"><strong>时间:</strong> ${new Date(
+                      result.timestamp
+                    ).toLocaleString()}</p>
+                    ${
+                      result.status !== "error"
+                        ? `
+                        <p class="mb-2"><strong>处理文件:</strong> ${result.processed}</p>
+                        <p class="mb-0"><strong>重命名文件:</strong> ${result.renamed}</p>
+                    `
+                        : `
+                        <p class="mb-0"><strong>错误信息:</strong> ${result.message}</p>
+                    `
+                    }
+                </div>
+            `;
+
+        document.getElementById("last-scan-result").innerHTML = html;
+      }
+
+      // 手动扫描
+      async function performManualScan() {
+        const btn = document.getElementById("manual-scan-btn");
+        const originalText = btn.innerHTML;
+
+        btn.disabled = true;
+        btn.innerHTML =
+          '<span class="spinner-border spinner-border-sm" role="status"></span> 扫描中...';
+
+        try {
+          const response = await fetch("/api/manual-scan", {
+            method: "POST",
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            displayLastScanResult(data.result);
+            // 刷新其他数据
+            loadHistory();
+            loadChangeRecords();
+          } else {
+            alert(
+              "扫描失败: " + (data.result ? data.result.message : "未知错误")
+            );
+          }
+        } catch (error) {
+          console.error("手动扫描失败:", error);
+          alert("扫描失败: 网络错误");
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = originalText;
+        }
+      }
+
+      // 加载扫描历史
+      async function loadHistory() {
+        try {
+          const response = await fetch("/api/history");
+          const data = await response.json();
+
+          if (data.history.length === 0) {
+            document.getElementById("history-content").innerHTML =
+              '<p class="text-muted">暂无扫描历史</p>';
+            return;
+          }
+
+          let html = '<div class="row">';
+
+          data.history.reverse().forEach((record, index) => {
+            const statusClass =
+              record.status === "error" ? "danger" : "success";
+            const statusIcon =
+              record.status === "error" ? "x-circle" : "check-circle";
+
+            html += `
+                        <div class="col-md-6 mb-3">
+                            <div class="card border-${statusClass}">
+                                <div class="card-header bg-${statusClass} text-white">
+                                    <h6 class="card-title mb-0">
+                                        <i class="bi bi-${statusIcon}"></i> 
+                                        扫描 #${data.history.length - index}
+                                    </h6>
+                                </div>
+                                <div class="card-body">
+                                    <p><strong>时间:</strong> ${new Date(
+                                      record.timestamp
+                                    ).toLocaleString()}</p>
+                                    ${
+                                      record.status !== "error"
+                                        ? `
+                                        <p><strong>处理:</strong> ${record.processed} 个文件</p>
+                                        <p><strong>重命名:</strong> ${record.renamed} 个文件</p>
+                                    `
+                                        : `
+                                        <p><strong>错误:</strong> ${record.message}</p>
+                                    `
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    `;
+          });
+
+          html += "</div>";
+          document.getElementById("history-content").innerHTML = html;
+        } catch (error) {
+          console.error("加载历史失败:", error);
+          document.getElementById("history-content").innerHTML =
+            '<div class="alert alert-danger">加载失败</div>';
+        }
+      }
+
+      // 加载变更记录
+      async function loadChangeRecords() {
+        try {
+          const response = await fetch("/api/change-records");
+          const data = await response.json();
+
+          if (data.records.length === 0) {
+            document.getElementById("records-content").innerHTML =
+              '<p class="text-muted">暂无变更记录</p>';
+            return;
+          }
+
+          let html = "";
+
+          data.records.forEach((record) => {
+            const isSuccess = record.status === "success";
+            const recordClass = isSuccess ? "" : "failed";
+            const statusIcon = isSuccess
+              ? "check-circle text-success"
+              : "x-circle text-danger";
+
+            html += `
+                        <div class="record-item ${recordClass} mb-3">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <h6 class="mb-1">
+                                        <i class="bi bi-${statusIcon}"></i>
+                                        ${
+                                          record.type === "rename"
+                                            ? "文件重命名"
+                                            : "字幕重命名"
+                                        }
+                                    </h6>
+                                    <p class="mb-1">
+                                        <strong>节目:</strong> ${
+                                          record.show
+                                        } / ${record.season}
+                                    </p>
+                                    <p class="mb-1">
+                                        <strong>原文件名:</strong> <code>${
+                                          record.original
+                                        }</code>
+                                    </p>
+                                    <p class="mb-1">
+                                        <strong>新文件名:</strong> <code>${
+                                          record.new
+                                        }</code>
+                                    </p>
+                                    ${
+                                      record.error
+                                        ? `<p class="mb-1 text-danger"><strong>错误:</strong> ${record.error}</p>`
+                                        : ""
+                                    }
+                                </div>
+                                <small class="text-muted">
+                                    ${new Date(
+                                      record.timestamp
+                                    ).toLocaleString()}
+                                </small>
+                            </div>
+                        </div>
+                    `;
+          });
+
+          document.getElementById("records-content").innerHTML = html;
+        } catch (error) {
+          console.error("加载变更记录失败:", error);
+          document.getElementById("records-content").innerHTML =
+            '<div class="alert alert-danger">加载失败</div>';
+        }
+      }
+
+      // 加载日志文件列表
+      async function loadLogFiles() {
+        try {
+          const response = await fetch("/api/logs");
+          const data = await response.json();
+
+          if (data.logs.length === 0) {
+            document.getElementById("log-files-list").innerHTML =
+              '<div class="p-3 text-muted">暂无日志文件</div>';
+            return;
+          }
+
+          let html = "";
+          data.logs.forEach((log) => {
+            const sizeKB = (log.size / 1024).toFixed(1);
+            html += `
+                        <a href="#" class="list-group-item list-group-item-action log-file-item" data-filename="${
+                          log.name
+                        }">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">${log.name}</h6>
+                                <small>${sizeKB} KB</small>
+                            </div>
+                            <small class="text-muted">${new Date(
+                              log.modified
+                            ).toLocaleString()}</small>
+                        </a>
+                    `;
+          });
+
+          document.getElementById("log-files-list").innerHTML = html;
+
+          // 添加点击事件
+          document.querySelectorAll(".log-file-item").forEach((item) => {
+            item.addEventListener("click", function (e) {
+              e.preventDefault();
+              const filename = this.dataset.filename;
+              loadLogContent(filename);
+
+              // 更新选中状态
+              document
+                .querySelectorAll(".log-file-item")
+                .forEach((el) => el.classList.remove("active"));
+              this.classList.add("active");
+            });
+          });
+        } catch (error) {
+          console.error("加载日志文件失败:", error);
+          document.getElementById("log-files-list").innerHTML =
+            '<div class="alert alert-danger p-3">加载失败</div>';
+        }
+      }
+
+      // 加载日志内容
+      async function loadLogContent(filename) {
+        const logContent = document.getElementById("log-content");
+        logContent.innerHTML =
+          '<div class="text-center p-3"><div class="spinner-border" role="status"></div></div>';
+
+        try {
+          const response = await fetch(`/api/logs/${filename}`);
+          const data = await response.json();
+
+          if (data.error) {
+            logContent.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+            return;
+          }
+
+          logContent.innerHTML = `<pre>${data.content}</pre>`;
+          logContent.scrollTop = logContent.scrollHeight; // 滚动到底部
+        } catch (error) {
+          console.error("加载日志内容失败:", error);
+          logContent.innerHTML =
+            '<div class="alert alert-danger">加载失败</div>';
+        }
+      }
+
+      // 自动验证函数
+      async function autoAuthenticate() {
+        const accessKey = localStorage.getItem("access_key");
+        if (!accessKey) return false;
+
+        const btn = document.querySelector('#auth-form button[type="submit"]');
+        const spinner = btn.querySelector(".spinner-border");
+        const btnText = btn.querySelector(".btn-text");
+        const errorDiv = document.getElementById("auth-error");
+
+        // 显示加载状态
+        btn.disabled = true;
+        spinner.classList.remove("d-none");
+        btnText.textContent = "验证中...";
+        errorDiv.classList.add("d-none");
+
+        try {
+          const result = await authenticate(accessKey);
+
+          if (result.success) {
+            isAuthenticated = true;
+            showAuthenticatedContent();
+            return true;
+          } else {
+            localStorage.removeItem("access_key");
+            errorDiv.textContent = "自动验证失败，请重新输入密钥";
+            errorDiv.classList.remove("d-none");
+            return false;
+          }
+        } catch (error) {
+          localStorage.removeItem("access_key");
+          errorDiv.textContent = "自动验证失败，请重试";
+          errorDiv.classList.remove("d-none");
+          return false;
+        } finally {
+          btn.disabled = false;
+          spinner.classList.add("d-none");
+          btnText.textContent = "验证";
+        }
+      }
+
+      // 事件监听器
+      document.addEventListener("DOMContentLoaded", function () {
+        // 尝试自动验证
+        autoAuthenticate();
+
+        // 认证表单提交
+        document
+          .getElementById("auth-form")
+          .addEventListener("submit", async function (e) {
+            e.preventDefault();
+
+            const accessKey = document.getElementById("access-key").value;
+            const btn = this.querySelector('button[type="submit"]');
+            const spinner = btn.querySelector(".spinner-border");
+            const btnText = btn.querySelector(".btn-text");
+            const errorDiv = document.getElementById("auth-error");
+
+            // 显示加载状态
+            btn.disabled = true;
+            spinner.classList.remove("d-none");
+            btnText.textContent = "验证中...";
+            errorDiv.classList.add("d-none");
+
+            try {
+              const result = await authenticate(accessKey);
+
+              if (result.success) {
+                isAuthenticated = true;
+                localStorage.setItem("access_key", accessKey);
+                showAuthenticatedContent();
+              } else {
+                localStorage.removeItem("access_key");
+                errorDiv.textContent = result.message;
+                errorDiv.classList.remove("d-none");
+              }
+            } catch (error) {
+              localStorage.removeItem("access_key");
+              errorDiv.textContent = "验证失败，请重试";
+              errorDiv.classList.remove("d-none");
+            } finally {
+              btn.disabled = false;
+              spinner.classList.add("d-none");
+              btnText.textContent = "验证";
+            }
+          });
+
+        // 手动扫描按钮
+        document
+          .getElementById("manual-scan-btn")
+          .addEventListener("click", performManualScan);
+
+        // 刷新按钮
+        document
+          .getElementById("refresh-status-btn")
+          .addEventListener("click", loadSystemStatus);
+        document
+          .getElementById("refresh-history-btn")
+          .addEventListener("click", loadHistory);
+        document
+          .getElementById("refresh-records-btn")
+          .addEventListener("click", loadChangeRecords);
+        document
+          .getElementById("refresh-logs-btn")
+          .addEventListener("click", loadLogFiles);
+      });
+    </script>
+  </body>
+</html>
