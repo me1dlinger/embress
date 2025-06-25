@@ -9,68 +9,73 @@
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL%203.0-4CAF50?style=flat-square)](LICENSE)
 </div>
 
+---
 
-**EMBRESS**是一种全自动的文件重命名工具，专为**Emby**、**Jellyfin**、**Plex**等媒体库设计，可确保所有文件名称符合标准化的命名约定，以进行适当的刮擦和元数据解析。
+## 🔰 Overview
 
-## 🔰 功能说明
+**EMBRESS** is a fully automated file renaming tool designed for media libraries such as **Emby**, **Jellyfin**, or **Plex**, ensuring all file names conform to standardized naming conventions for proper scraping and metadata parsing.
 
+---
 
-### 文件自动重命名
-
-自动扫描配置的目录
-多种正则替换规则自动应用
-扫描日志记录
-
-### 页面展示
-
-仪表盘展示系统配置
-提供手动全部扫描和指定路径扫描
-扫描历史展示
-文件变更记录展示
-查看日志
+## 🚀 Features
 
 
-### 页面访问鉴权
 
-可配置访问密钥
+### 📁 Auto-Renaming
 
-### 文件结构
+- Scheduled directory scanning
+- Automatically apply regex rules for filename rewriting
+- Logging for scan and rename operations
+
+### 📊 Web Dashboard
+
+- System configuration overview
+- Manual or targeted scan triggering
+- Scan history records
+- Rename history tracking
+- Log viewer
+
+### 🔐 Access Control
+
+- Optional access key for UI protection
+
+### 📁 Project Structure
 
 ```
 embress
 ├── python
 │   │ 
-│   ├── app.py                      ➔ API服务
-│   ├── embress_rename.py           ➔ 重命名业务
-│   ├── requirements.txt            ➔ python依赖
+│   ├── app.py                      ➔ API server
+│   ├── embress_rename.py           ➔ rename logic
+│   ├── requirements.txt            ➔ Python dependencies
 │   ├── conf
-│   │   └── regex_patterns.json     ➔ 正则配置
+│   │   └── regex_patterns.json     ➔ Regex config file
 │   ├── templates
-│   │   └── index.html              ➔ 前端面板
-│   └── static                      ➔ 静态文件目录
+│   │   └── index.html              ➔ Dashboard UI
+│   └── static                      ➔ Static resources
 │        ├── css
-│        │   └── styles.css
+│        │   └── styles.css 
 │        └── js
 │            ├── main.js
 │            └── vue.js
 │     
 │     
 ├── conf
-│   └── supervisord.conf            ➔ supervisord进程配置
-├── Dockerfile                      ➔ 打包配置
-└── docker-compose.yml              ➔ docker构建配置，宿主机要先创建对应目录
+│   └── supervisord.conf            ➔ Supervisor config
+├── Dockerfile                      ➔ Docker build file
+└── docker-compose.yml              ➔ Compose file
   
 ```
 
-## 🐳 部署说明
+## 🐳 Deployment Guide
 
-
-### 拉取镜像
+### Pull Docker Image
 
 ```
 docker pull meidlinger1024/embress:latest
 ```
-### docker run配置
+
+### Run with Docker
 
 ```
 
@@ -89,12 +94,12 @@ docker run -d \
   embress:latest
 ```
 
-### docker-compose配置
+### Run with Docker Compose
 ```
 version: '3'
 services:
   embress:
-    image: embress:1.0.0
+    image: embress:latest
     container_name: embress
     restart: always
     ports:

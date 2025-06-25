@@ -15,7 +15,7 @@ from typing import Dict, List, Tuple, Optional,Set
 
 LOGS_DIR = r'/app/python/log'
 MEDIA_DIR =  os.getenv('MEDIA_PATH', '/app/media')
-REGEX_PATH =  os.getenv('REGEX_PATH', 'regex_patterns.json')
+REGEX_PATH =  os.getenv('REGEX_PATH', 'conf/regex_patterns.json')
 
 class RegexLoader:
     """负责把正则表达式从 JSON 文件中读取进来（热加载）"""
@@ -38,18 +38,18 @@ class RegexLoader:
             cls._cache_mtime = mtime
         return cls._patterns
 
-class EmbyRenamer:
+class EmbressRenamer:
     def __init__(self, media_path: str):
         self.media_path = Path(media_path)
         self.logger = self._setup_logger()
 
     def _setup_logger(self) -> logging.Logger:
-        logger = logging.getLogger('EmbyRenamer')
+        logger = logging.getLogger('EmbressRenamer')
         logger.setLevel(logging.INFO)
         log_dir = Path(LOGS_DIR)
         log_dir.mkdir(exist_ok=True)
         fh = logging.FileHandler(
-            log_dir / f'emby_renamer_{datetime.datetime.now():%Y%m%d}.log',
+            log_dir / f'embress_renamer_{datetime.datetime.now():%Y%m%d}.log',
             encoding='utf-8')
         fh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
         if not logger.handlers:
@@ -304,5 +304,5 @@ class EmbyRenamer:
 if __name__ == "__main__":
     import sys
     root = sys.argv[1] if len(sys.argv) > 1 else MEDIA_DIR
-    print(json.dumps(EmbyRenamer(root).scan_and_rename(),
+    print(json.dumps(EmbressRenamer(root).scan_and_rename(),
                      ensure_ascii=False, indent=2))

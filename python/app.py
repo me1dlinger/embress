@@ -12,7 +12,7 @@ from pathlib import Path
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify
 from apscheduler.schedulers.background import BackgroundScheduler
-from emby_renamer import EmbyRenamer
+from python.embress_renamer import EmbressRenamer
 from threading import Lock
 
 app = Flask(__name__)
@@ -24,7 +24,7 @@ ACCESS_KEY = os.getenv("ACCESS_KEY", "12345")
 SCAN_INTERVAL = int(os.getenv("SCAN_INTERVAL", 3600))
 HISTORY_FILE = Path(LOG_DIR) / "scan_history.log"
 # 全局变量
-renamer = EmbyRenamer(MEDIA_PATH)
+renamer = EmbressRenamer(MEDIA_PATH)
 scheduler = BackgroundScheduler()
 last_scan_result = None
 # === 全局状态 ===
@@ -282,7 +282,7 @@ if __name__ == "__main__":
             trigger="interval",
             seconds=SCAN_INTERVAL,
             id="scan_job",
-            name="Emby文件扫描任务",
+            name="文件扫描任务",
             replace_existing=True,
         )
         scheduler.start()
