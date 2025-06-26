@@ -39,6 +39,22 @@ new Vue({
     showSubPathModal: false,
     subPath: "",
     subScanLoading: false,
+    showUnrenamedModal: false,
+    unrenamedFiles: [],
+    addToWhitelistLoading: false,
+
+    showWhitelistModal: false,
+    whitelistFiles: [],
+    whitelistLoading: false,
+    deleteFromWhitelistLoading: false,
+    showRegexModal: false,
+    regexPatterns: {
+      season_episode: [],
+      episode_only: [],
+    },
+    regexLoading: false,
+    regexSaving: false,
+    regexError: "",
   },
 
   mounted() {
@@ -291,6 +307,219 @@ new Vue({
         alert("扫描失败: 网络错误");
       } finally {
         this.subScanLoading = false;
+      }
+    },
+    // 在 main.js 的 methods 对象中添加以下方法：
+
+    // 显示未重命名文件弹窗
+    showUnrenamedFiles(files) {
+      this.unrenamedFiles = files || [];
+      this.showUnrenamedModal = true;
+    },
+
+    // 关闭未重命名文件弹窗
+    closeUnrenamedModal() {
+      this.showUnrenamedModal = false;
+      this.unrenamedFiles = [];
+    },
+    // 显示白名单文件弹窗
+    async showWhitelist() {
+      try {
+        const response = await fetch("/api/whitelist");
+        const data = await response.json();
+
+        this.whitelistFiles = data.whitelist || [];
+        this.showWhitelistModal = true;
+      } catch (error) {
+        console.error("加载白名单文件失败:", error);
+        this.whitelistFiles = [];
+      }
+    },
+
+    // 关闭未重命名文件弹窗
+    closeWhitelistModal() {
+      this.showWhitelistModal = false;
+      this.whitelistFiles = [];
+    },
+    // 添加到白名单
+    async addToWhitelist(filePath) {
+      this.addToWhitelistLoading = true;
+
+      try {
+        // 预留接口调用
+        const response = await fetch("/api/whitelist", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            file_path: filePath,
+          }),
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          // 添加成功，从列表中移除该文件
+          this.unrenamedFiles = this.unrenamedFiles.filter(
+            (file) => file.path !== filePath
+          );
+
+          // 如果列表为空，关闭弹窗
+          if (this.unrenamedFiles.length === 0) {
+            this.closeUnrenamedModal();
+          }
+
+          // 刷新数据
+          this.loadSystemStatus();
+          this.loadHistory();
+        } else {
+          alert("添加到白名单失败: " + result.message);
+        }
+      } catch (error) {
+        console.error("添加白名单失败:", error);
+        alert("添加到白名单失败: 网络错误");
+      } finally {
+        this.addToWhitelistLoading = false;
+      }
+    },
+    async deleteFromWhitelist(filePath) {
+      this.deleteFromWhitelistLoading = true;
+
+      try {
+        // 预留接口调用
+        const response = await fetch("/api/whitelist", {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            file_path: filePath,
+          }),
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          // 移除成功，从白名单中移除该文件
+          this.whitelistFiles = this.whitelistFiles.filter(
+            (path) => path !== filePath
+          );
+
+          // 如果列表为空，关闭弹窗
+          if (this.whitelistFiles.length === 0) {
+            this.closeWhitelistModal();
+          }
+          // 刷新数据
+          this.loadSystemStatus();
+          this.loadHistory();
+        } else {
+          alert("移出白名单失败: " + result.message);
+        }
+      } catch (error) {
+        console.error("移出白名单失败:", error);
+        alert("移出白名单失败: 网络错误");
+      } finally {
+        this.deleteFromWhitelistLoading = false;
+      }
+    },
+    // 提取文件名
+    // 提取文件名（兼容 Windows/Unix）
+    getFileName(filePath) {
+      // 标准化处理：替换连续分隔符并移除结尾分隔符
+      const normalized = filePath.replace(/[\\/]+/g, "/").replace(/\/$/, "");
+      return normalized.substring(normalized.lastIndexOf("/") + 1);
+    },
+
+    // 提取目录路径（兼容 Windows/Unix）
+    getDirectoryPath(filePath) {
+      // 标准化处理：替换连续分隔符并移除结尾分隔符
+      const normalized = filePath.replace(/[\\/]+/g, "/").replace(/\/$/, "");
+
+      const lastIndex = normalized.lastIndexOf("/");
+      if (lastIndex === -1) return ""; // 无分隔符时返回空字符串
+
+      const directoryPath = normalized.substring(0, lastIndex);
+
+      // 特殊处理 Windows 盘符路径 (如 C:\)
+      if (/^[a-zA-Z]:$/.test(directoryPath)) {
+        return directoryPath + "/"; // 返回 C:/
+      }
+
+      return directoryPath || "/"; // 根目录返回 '/'
+    },
+    async showRegexConfig() {
+      this.showRegexModal = true;
+      this.regexError = "";
+      await this.loadRegexPatterns();
+    },
+
+    // 关闭正则表达式配置弹窗
+    closeRegexModal() {
+      this.showRegexModal = false;
+      this.regexError = "";
+    },
+
+    // 加载正则表达式配置
+    async loadRegexPatterns() {
+      this.regexLoading = true;
+
+      try {
+        const response = await fetch("/api/regex-patterns");
+        const data = await response.json();
+
+        if (data.success) {
+          // 确保格式化为数组
+          if (typeof data.patterns === "string") {
+            this.regexPatterns = JSON.parse(data.patterns);
+          } else {
+            this.regexPatterns = data.patterns;
+          }
+        } else {
+          this.regexError = "加载失败: " + data.message;
+        }
+      } catch (error) {
+        console.error("加载正则配置失败:", error);
+        this.regexError = "加载失败: 网络错误";
+      } finally {
+        this.regexLoading = false;
+      }
+    },
+    addRegexItem(type) {
+      this.regexPatterns[type].push("");
+    },
+    removeRegexItem(type, index) {
+      this.regexPatterns[type].splice(index, 1);
+    },
+    // 保存正则表达式配置
+    async saveRegexPatterns() {
+      this.regexSaving = true;
+      this.regexError = "";
+
+      try {
+        const response = await fetch("/api/regex-patterns", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(this.regexPatterns),
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          // 保存成功，关闭弹窗
+          this.closeRegexModal();
+          // 可选：显示成功提示
+          alert("正则配置已保存");
+        } else {
+          this.regexError = "保存失败: " + result.message;
+        }
+      } catch (error) {
+        console.error("保存正则配置失败:", error);
+        this.regexError = "保存失败: 网络错误";
+      } finally {
+        this.regexSaving = false;
       }
     },
   },

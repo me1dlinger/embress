@@ -122,6 +122,19 @@
                           </div>
                         </div>
                         <div class="row mt-2">
+                          <div class="col-6"><strong>白名单数量:</strong></div>
+                          <div class="col-6">
+                            <span v-if="systemStatus.total_whitelist>0" class="badge bg-info" @click="showWhitelist">
+                              [[ systemStatus.total_whitelist ]]
+                            </span>
+                            <span v-else>
+                              0
+                            </span>
+                          </div>
+
+
+                        </div>
+                        <div class="row mt-2">
                           <div class="col-6"><strong>扫描间隔:</strong></div>
                           <div class="col-6">
                             [[ systemStatus.scan_interval ]] 秒
@@ -167,6 +180,9 @@
 
                         <span style="color: white;"><i class="bi bi-folder2-open me-2"></i>指定路径扫描</span>
                       </button>
+                      <button class="btn btn-warning w-100 mb-3" @click="showRegexConfig">
+                        <i class="bi bi-gear me-2"></i>正则配置
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -203,10 +219,20 @@
                               <strong>处理文件:</strong> [[
                               lastScanResult.processed ]]
                             </p>
-                            <p class="mb-0">
-                              <strong>重命名文件:</strong> [[
-                              lastScanResult.renamed ]]
-                            </p>
+                            <div class="d-flex align-items-center mb-2">
+                              <strong class="me-2">重命名:</strong>
+                              <span>[[ lastScanResult.renamed ]] 个文件</span>
+                              <span v-if="lastScanResult.unrenamed_count > 0" class="ms-3">
+                                <span class="badge bg-warning text-dark me-2">
+                                  <i class="bi bi-exclamation-triangle me-1"></i>
+                                  [[ lastScanResult.unrenamed_count ]] 个未重命名
+                                </span>
+                                <button class="btn btn-sm btn-outline-warning"
+                                  @click="showUnrenamedFiles(lastScanResult.unrenamed_files)">
+                                  <i class="bi bi-eye me-1"></i>查看
+                                </button>
+                              </span>
+                            </div>
                           </div>
                           <div v-else>
                             <p class="mb-0">
@@ -271,11 +297,20 @@
                                   <strong>处理:</strong> [[ record.processed
                                   ]] 个文件
                                 </p>
-                                <p>
-                                  <strong>重命名:</strong> [[ record.renamed
-                                  ]] 个文件
-                                </p>
-
+                                <div class="d-flex align-items-center mb-2">
+                                  <strong class="me-2">重命名:</strong>
+                                  <span>[[ record.renamed ]] 个文件</span>
+                                  <span v-if="record.unrenamed_count > 0" class="ms-3">
+                                    <span class="badge bg-warning text-dark me-2">
+                                      <i class="bi bi-exclamation-triangle me-1"></i>
+                                      [[ record.unrenamed_count ]] 个未重命名
+                                    </span>
+                                    <button class="btn btn-sm btn-outline-warning"
+                                      @click="showUnrenamedFiles(record.unrenamed_files)">
+                                      <i class="bi bi-eye me-1"></i>查看
+                                    </button>
+                                  </span>
+                                </div>
                               </div>
                               <div v-else>
                                 <p>
@@ -421,9 +456,7 @@
     </div>
     <transition name="fade">
       <div v-if="showSubPathModal" class="modal-overlay" @click.self="closeSubPathModal"
-        @keydown.esc="closeSubPathModal"
-        tabindex="0"
-        >
+        @keydown.esc="closeSubPathModal" tabindex="0">
         <div class="modal-content-custom animated">
           <div class="modal-header">
             <h5 class="modal-title">
@@ -443,6 +476,204 @@
             <button class="btn btn-primary" @click="performSubScan" :disabled="subScanLoading">
               <span v-if="subScanLoading" class="spinner-border spinner-border-sm"></span>
               <span v-else>扫描</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+    <!-- 在现有的指定路径扫描弹窗后面添加 -->
+    <!-- 未重命名文件弹窗 -->
+    <transition name="fade">
+      <div v-if="showUnrenamedModal" class="modal-overlay" @click.self="closeUnrenamedModal"
+        @keydown.esc="closeUnrenamedModal" tabindex="0">
+        <div class="modal-content-custom animated unrenamed-modal">
+          <div class="modal-header">
+            <h5 class="modal-title">
+              <i class="bi bi-exclamation-triangle me-2 text-warning"></i> 未重命名文件列表
+            </h5>
+            <button type="button" class="btn-close" @click="closeUnrenamedModal"></button>
+          </div>
+
+          <div class="modal-body">
+            <div v-if="unrenamedFiles.length === 0" class="text-center py-4 text-muted">
+              <i class="bi bi-check-circle mb-2" style="font-size: 2rem;"></i>
+              <p>暂无未重命名文件</p>
+            </div>
+            <div v-else>
+              <p class="text-muted mb-3">
+                <i class="bi bi-info-circle me-1"></i>
+                共 <strong>[[ unrenamedFiles.length ]]</strong> 个文件未能重命名，您可以将这些文件添加到白名单中以跳过重命名。
+              </p>
+              <div class="unrenamed-files-list">
+                <div v-for="(file, index) in unrenamedFiles" :key="index" class="unrenamed-file-item">
+                  <div class="file-info">
+                    <div class="file-name">
+                      <i class="bi bi-file-earmark me-2"></i>
+                      <strong>[[ getFileName(file.path) ]]</strong>
+                    </div>
+                    <div class="file-path text-muted">
+                      <i class="bi bi-folder me-1"></i>
+                      [[ getDirectoryPath(file.path) ]]
+                    </div>
+                  </div>
+                  <button class="btn btn-sm btn-outline-primary" @click="addToWhitelist(file.path)"
+                    :disabled="whitelistLoading">
+                    <span v-if="whitelistLoading" class="spinner-border spinner-border-sm me-1"></span>
+                    <i v-else class="bi bi-plus-circle me-1"></i>
+                    加入白名单
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button class="btn btn-secondary" @click="closeUnrenamedModal">关闭</button>
+          </div>
+        </div>
+      </div>
+    </transition>
+    <!-- 白名单文件弹窗 -->
+    <transition name="fade">
+      <div v-if="showWhitelistModal" class="modal-overlay" @click.self="closeWhitelistModal"
+        @keydown.esc="closeWhitelistModal" tabindex="0">
+        <div class="modal-content-custom animated unrenamed-modal">
+          <div class="modal-header">
+            <h5 class="modal-title">
+              白名单文件列表
+            </h5>
+            <button type="button" class="btn-close" @click="closeWhitelistModal"></button>
+          </div>
+
+          <div class="modal-body">
+            <div v-if="whitelistFiles.length === 0" class="text-center py-4 text-muted">
+              <i class="bi bi-check-circle mb-2" style="font-size: 2rem;"></i>
+              <p>暂无白名单文件</p>
+            </div>
+            <div v-else>
+              <p class="text-muted mb-3">
+                <i class="bi bi-info-circle me-1"></i>
+                共 <strong>[[ whitelistFiles.length ]]</strong> 个文件在白名单中
+              </p>
+              <div class="unrenamed-files-list">
+                <div v-for="(path, index) in whitelistFiles" :key="index" class="unrenamed-file-item">
+                  <div class="file-info">
+                    <div class="file-name">
+                      <i class="bi bi-file-earmark me-2"></i>
+                      <strong>[[ getFileName(path) ]]</strong>
+                    </div>
+                    <div class="file-path text-muted">
+                      <i class="bi bi-folder me-1"></i>
+                      [[ getDirectoryPath(path) ]]
+                    </div>
+                  </div>
+                  <button class="btn btn-sm btn-outline-primary" @click="deleteFromWhitelist(path)"
+                    :disabled="deleteFromWhitelistLoading">
+                    <span v-if="deleteFromWhitelistLoading" class="spinner-border spinner-border-sm me-1"></span>
+                    <i v-else class="bi bi-plus-circle me-1"></i>
+                    移出白名单
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button class="btn btn-secondary" @click="closeWhitelistModal">关闭</button>
+          </div>
+        </div>
+      </div>
+    </transition>
+    <transition name="fade">
+      <div v-if="showRegexModal" class="modal-overlay regex-modal" @click.self="closeRegexModal"
+        @keydown.esc="closeRegexModal" tabindex="0">
+        <div class="modal-content-custom animated">
+          <div class="modal-header">
+            <h5 class="modal-title">
+              <i class="bi bi-code-slash me-2"></i> 正则表达式配置
+            </h5>
+            <button type="button" class="btn-close" @click="closeRegexModal"></button>
+          </div>
+
+          <div class="modal-body">
+            <div v-if="regexLoading" class="d-flex justify-content-center py-4">
+              <div class="spinner-border text-primary" role="status"></div>
+            </div>
+            <div v-else>
+              <!-- 季集模式正则表达式 -->
+              <div class="regex-section">
+                <div class="regex-section-header">
+                  <h6 class="regex-section-title">
+                    <i class="bi bi-collection me-2"></i> 季集模式正则表达式
+                  </h6>
+                  <button type="button" class="btn btn-sm btn-outline-primary" @click="addRegexItem('season_episode')">
+                    <i class="bi bi-plus-circle me-1"></i> 添加
+                  </button>
+                </div>
+                <p class="form-text mb-3">用于识别包含季数和集数的文件名格式，如 S01E01</p>
+
+                <div class="regex-list">
+                  <div v-for="(pattern, index) in regexPatterns.season_episode" :key="index" class="regex-item">
+                    <input type="text" class="form-control regex-input" v-model="regexPatterns.season_episode[index]"
+                      placeholder="例如: [Ss](\d{1,2})[Ee](\d{1,3})">
+                    <div class="regex-actions">
+                      <button class="btn btn-outline-danger btn-sm" type="button"
+                        @click="removeRegexItem('season_episode', index)" title="删除">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div v-if="regexPatterns.season_episode.length === 0" class="regex-empty">
+                    <i class="bi bi-inbox"></i>
+                    <p>暂无正则表达式</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 集数模式正则表达式 -->
+              <div class="regex-section">
+                <div class="regex-section-header">
+                  <h6 class="regex-section-title">
+                    <i class="bi bi-123 me-2"></i> 集数模式正则表达式
+                  </h6>
+                  <button type="button" class="btn btn-sm btn-outline-primary" @click="addRegexItem('episode_only')">
+                    <i class="bi bi-plus-circle me-1"></i> 添加
+                  </button>
+                </div>
+                <p class="form-text mb-3">用于识别只包含集数的文件名格式，如 第01话</p>
+
+                <div class="regex-list">
+                  <div v-for="(pattern, index) in regexPatterns.episode_only" :key="index" class="regex-item">
+                    <input type="text" class="form-control regex-input" v-model="regexPatterns.episode_only[index]"
+                      placeholder="例如: $$(\d{1,3})$$">
+                    <div class="regex-actions">
+                      <button class="btn btn-outline-danger btn-sm" type="button"
+                        @click="removeRegexItem('episode_only', index)" title="删除">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div v-if="regexPatterns.episode_only.length === 0" class="regex-empty">
+                    <i class="bi bi-inbox"></i>
+                    <p>暂无正则表达式</p>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="regexError" class="alert alert-danger mt-3 py-2">
+                <i class="bi bi-exclamation-circle me-2"></i>
+                [[ regexError ]]
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button class="btn btn-primary" @click="saveRegexPatterns" :disabled="regexSaving || regexLoading">
+              <span v-if="regexSaving" class="spinner-border spinner-border-sm me-2"></span>
+              <i v-else class="bi bi-check-circle me-2"></i>
+              [[ regexSaving ? '保存中...' : '保存配置' ]]
             </button>
           </div>
         </div>
