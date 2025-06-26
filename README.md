@@ -12,6 +12,16 @@
 
 **EMBRESS**是一个全自动的文件重命名工具，专为**Emby**、**Jellyfin**、**Plex**等媒体库设计，可确保所有文件名称符合标准化的命名约定，以进行适当的刮擦和元数据解析。
 
+## 🎗️ 用前提示
+
+请确保影视库中节目目录命名已经符合规范，如 **/data/anime/节目XX/Season 01/AnimeXX 01 [1920x1080].mkv**
+
+可通过将**/data/anime**映射到docker容器内目录
+
+如 **-v /data/anime:/app/media/anime**
+
+EMBRESS会自动将宿主机anime目录添加到影视库的遍历列表中，通过Season XX目录名，以识别出季度信息
+
 ## 🔰 功能说明
 
 
@@ -88,6 +98,19 @@ docker run -d \
   -e SCAN_INTERVAL=3600 \
   embress:latest
 ```
+
+${media_path1}：影视库目录1
+
+${media_path2}：影视库目录2
+
+${logs_path}：python日志目录，扫描记录持久化目录
+
+${conf_path}：正则等配置目录
+
+${ACCESS_KEY}：访问秘钥
+
+SCAN_INTERVAL：扫描间隔，单位秒
+
 
 ### docker-compose配置
 ```
