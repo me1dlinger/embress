@@ -20,8 +20,8 @@ WHITELIST_PATH = os.getenv("WHITELIST_PATH", "whitelist.json")
 
 STATUS_RENAMED = "renamed"
 STATUS_FAILED = "failed"
-STATUS_SKIP = "skip"  # 统一用同一个单词
-STATUS_UNMATCHED = "unmatched"  # 统一用同一个单词
+STATUS_SKIP = "skip"
+STATUS_UNMATCHED = "unmatched"
 STATUS_WHITELIST = "whitelisted"
 STATUS_UNPROCESSED = "unprocessed"
 
@@ -331,8 +331,6 @@ class EmbressRenamer:
             ".ts",
             ".m2ts",
         }
-
-        # ---------- ① 直接季目录分支 ----------
         if sub_path and "season" in root_path.name.lower():
             processed_files = self._season_processed_set(root_path)
             season_num_hint = self._get_season_from_path(root_path)
@@ -352,7 +350,7 @@ class EmbressRenamer:
                 season_info = self._extract_episode_info(file.name)
                 if season_info is None:
                     file_info["status"] = STATUS_UNMATCHED
-                    file_info["reason"] = "no_episode_info"
+                    file_info["reason"] = "no_episode_and_season_info"
                     processed_files_list.append(file_info)
                     continue
 
@@ -382,7 +380,6 @@ class EmbressRenamer:
 
                 processed_files_list.append(file_info)
 
-        # ---------- ② 四层目录分支 ----------
         else:
             for media_type_dir in self.media_path.iterdir():
                 if not media_type_dir.is_dir():
@@ -427,15 +424,13 @@ class EmbressRenamer:
                             info = self._extract_episode_info(f.name)
                             if info is None:
                                 file_info["status"] = STATUS_UNMATCHED
-                                file_info["reason"] = "no_episode_info"
+                                file_info["reason"] = "no_episode_and_season_info"
                                 processed_files_list.append(file_info)
                                 continue
 
                             season, ep = info
                             season = season or season_num_hint
                             new_name = self._generate_new_filename(f.name, season, ep)
-
-                            # --- 改名逻辑 ---
                             if new_name != f.name:
                                 changes = self._rename_file_and_subtitles(f, new_name)
                                 if self._count_success_renames(changes):
@@ -461,14 +456,10 @@ class EmbressRenamer:
 
                             season_changes.extend(changes)
                             processed_files_list.append(file_info)
-
-                        # season_changes 写入记录
                         if season_changes:
                             self._save_change_record(
                                 season_dir, media_type_dir.name, season_changes
                             )
-
-        # ---------- ③ 统计未重命名 ----------
         finished_statuses = {STATUS_RENAMED, STATUS_WHITELIST, STATUS_SKIP}
         self.logger.info(processed_files_list)
         unrenamed_files = [

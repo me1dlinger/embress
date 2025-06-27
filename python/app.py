@@ -23,7 +23,6 @@ from embress_renamer import EmbressRenamer
 
 app = Flask(__name__)
 
-# ========================= 配置 =========================
 LOGS_PATH = os.getenv("LOG_PATH", "/app/python/logs")
 MEDIA_PATH = os.getenv("MEDIA_PATH", "/app/media")
 REGEX_PATH = os.getenv("REGEX_PATH", "regex_patterns.json")
@@ -35,7 +34,7 @@ HISTORY_FILE = Path(LOGS_PATH) / "scan_history.log"
 MAX_RETRIES = 3
 RETRY_DELAY = 0.5
 
-# ========================= 全局实例 & 状态 =========================
+
 renamer = EmbressRenamer(MEDIA_PATH)
 scheduler = BackgroundScheduler()
 
@@ -43,13 +42,8 @@ last_scan_result = None
 scan_history: List[dict] = []
 
 history_lock = Lock()
-regex_lock = Lock()  # 保护正则文件
-whitelist_lock = Lock()  # 保护白名单文件
-
-# ========================= 工具函数 =========================
-
-# ----------- 历史记录 -----------
-
+regex_lock = Lock()
+whitelist_lock = Lock() 
 
 def load_history() -> None:
     global scan_history, last_scan_result
@@ -70,8 +64,6 @@ def persist_history() -> None:
                 indent=2,
             )
 
-
-# ----------- 正则配置 -----------
 
 
 def load_regex_patterns() -> dict:
@@ -99,7 +91,6 @@ def save_regex_patterns(patterns: dict) -> None:
                 json.dump(patterns, tmp, ensure_ascii=False, indent=2)
                 tmp_name = tmp.name
 
-            # 使用shutil.copy代替os.replace
             shutil.copy(tmp_name, str(path))
             os.unlink(tmp_name)  # 删除临时文件
             return
@@ -110,9 +101,6 @@ def save_regex_patterns(patterns: dict) -> None:
             time.sleep(RETRY_DELAY)
 
     app.logger.error(f"保存正则配置失败，超过最大重试次数")
-
-
-# ----------- 白名单 -----------
 
 
 def _read_whitelist() -> Set[str]:
@@ -140,8 +128,6 @@ def _write_whitelist(entries: Set[str]) -> None:
     os.replace(tmp_name, path)
 
 
-# ========================= 定时扫描任务 =========================
-
 
 def scheduled_scan() -> None:
     global last_scan_result, scan_history
@@ -160,9 +146,6 @@ def scheduled_scan() -> None:
             "message": str(exc),
             "timestamp": datetime.now().isoformat(),
         }
-
-
-# ========================= 视图函数 / API =========================
 
 
 @app.route("/")
@@ -249,8 +232,6 @@ def scan_directory():
         return jsonify({"success": False, "result": error_result}), 500
 
 
-# ---------- 正则配置 ----------
-
 
 @app.route("/api/regex-patterns", methods=["GET"])
 def get_regex_patterns():
@@ -284,8 +265,6 @@ def update_regex_patterns():
         app.logger.exception("写入正则配置失败")
         return jsonify({"success": False, "message": str(exc)}), 500
 
-
-# ---------- 白名单 ----------
 
 
 @app.route("/api/whitelist", methods=["POST"])
@@ -337,8 +316,6 @@ def delete_from_whitelist():
         app.logger.exception("写入白名单失败")
         return jsonify({"success": False, "message": str(exc)}), 500
 
-
-# ---------- 日志 ----------
 @app.route("/api/change-records")
 def get_change_records():
     """获取所有变更记录（排除 skip）"""
@@ -365,7 +342,7 @@ def get_change_records():
                         season_records = json.load(f)
                     for rec in season_records:
                         if rec.get("status") == "skip":
-                            continue  # ★ 排除 skip
+                            continue
                         rec["media_type"] = media_type_dir.name
                         rec["show"] = show_dir.name
                         rec["season"] = season_dir.name
@@ -373,7 +350,6 @@ def get_change_records():
                 except Exception as e:
                     app.logger.error(f"读取变更记录失败 {record_file}: {e}")
 
-    # 按时间排序
     records.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
 
     return jsonify({"records": records[:200], "total": len(records)})
@@ -414,8 +390,6 @@ def get_log_content(filename: str):
         app.logger.exception("读取日志失败")
         return jsonify({"error": f"读取日志失败: {exc}"}), 500
 
-
-# ========================= 日志配置 & 应用启动 =========================
 
 
 def setup_logging() -> None:

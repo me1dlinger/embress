@@ -165,7 +165,7 @@
 
  /* 卡片样式 */
  .dashboard-card {
-   min-height: 250px;
+   min-height: 300px;
    border: none;
    border-radius: 12px;
    overflow: hidden;
