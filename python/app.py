@@ -10,6 +10,8 @@ import json
 import logging
 import tempfile
 from pathlib import Path
+import shutil
+import time
 from datetime import datetime
 from threading import Lock
 from typing import Set, List
@@ -22,13 +24,16 @@ from embress_renamer import EmbressRenamer
 app = Flask(__name__)
 
 # ========================= 配置 =========================
-LOGS_PATH = os.getenv("LOG_PATH", "E:\\Videos\\测试\\logs")
-MEDIA_PATH = os.getenv("MEDIA_PATH", "E:\\Videos\\测试\\A")
+LOGS_PATH = os.getenv("LOG_PATH", "E:\\Videos\\测试\\A")
+MEDIA_PATH = os.getenv("MEDIA_PATH", "E:\\Videos\\测试\\logs")
 REGEX_PATH = os.getenv("REGEX_PATH", "regex_patterns.json")
 WHITELIST_PATH = os.getenv("WHITELIST_PATH", "whitelist.json")
 ACCESS_KEY = os.getenv("ACCESS_KEY", "12345")
 SCAN_INTERVAL = int(os.getenv("SCAN_INTERVAL", 3600))
 HISTORY_FILE = Path(LOGS_PATH) / "scan_history.log"
+
+MAX_RETRIES = 3
+RETRY_DELAY = 0.5
 
 # ========================= 全局实例 & 状态 =========================
 renamer = EmbressRenamer(MEDIA_PATH)
@@ -38,12 +43,13 @@ last_scan_result = None
 scan_history: List[dict] = []
 
 history_lock = Lock()
-regex_lock = Lock()      # 保护正则文件
+regex_lock = Lock()  # 保护正则文件
 whitelist_lock = Lock()  # 保护白名单文件
 
 # ========================= 工具函数 =========================
 
 # ----------- 历史记录 -----------
+
 
 def load_history() -> None:
     global scan_history, last_scan_result
@@ -57,10 +63,16 @@ def load_history() -> None:
 def persist_history() -> None:
     with history_lock:
         with HISTORY_FILE.open("w", encoding="utf-8") as f:
-            json.dump({"history": scan_history, "last_scan": last_scan_result}, f, ensure_ascii=False, indent=2)
+            json.dump(
+                {"history": scan_history, "last_scan": last_scan_result},
+                f,
+                ensure_ascii=False,
+                indent=2,
+            )
 
 
 # ----------- 正则配置 -----------
+
 
 def load_regex_patterns() -> dict:
     path = Path(REGEX_PATH)
@@ -73,13 +85,35 @@ def load_regex_patterns() -> dict:
 def save_regex_patterns(patterns: dict) -> None:
     path = Path(REGEX_PATH)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with regex_lock, tempfile.NamedTemporaryFile("w", delete=False, dir=str(path.parent), encoding="utf-8") as tmp:
-        json.dump(patterns, tmp, ensure_ascii=False, indent=2)
-        tmp_name = tmp.name
-    os.replace(tmp_name, path)
+
+    for attempt in range(MAX_RETRIES):
+        try:
+            # 创建带.json后缀的临时文件
+            with tempfile.NamedTemporaryFile(
+                "w",
+                delete=False,
+                dir=str(path.parent),
+                encoding="utf-8",
+                suffix=".json",
+            ) as tmp:
+                json.dump(patterns, tmp, ensure_ascii=False, indent=2)
+                tmp_name = tmp.name
+
+            # 使用shutil.copy代替os.replace
+            shutil.copy(tmp_name, str(path))
+            os.unlink(tmp_name)  # 删除临时文件
+            return
+        except (OSError, IOError) as e:
+            app.logger.warning(
+                f"保存正则配置失败 (尝试 {attempt+1}/{MAX_RETRIES}): {str(e)}"
+            )
+            time.sleep(RETRY_DELAY)
+
+    app.logger.error(f"保存正则配置失败，超过最大重试次数")
 
 
 # ----------- 白名单 -----------
+
 
 def _read_whitelist() -> Set[str]:
     path = Path(WHITELIST_PATH)
@@ -98,13 +132,16 @@ def _read_whitelist() -> Set[str]:
 def _write_whitelist(entries: Set[str]) -> None:
     path = Path(WHITELIST_PATH)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with whitelist_lock, tempfile.NamedTemporaryFile("w", delete=False, dir=str(path.parent), encoding="utf-8") as tmp:
+    with whitelist_lock, tempfile.NamedTemporaryFile(
+        "w", delete=False, dir=str(path.parent), encoding="utf-8"
+    ) as tmp:
         json.dump(sorted(entries), tmp, ensure_ascii=False, indent=2)
         tmp_name = tmp.name
     os.replace(tmp_name, path)
 
 
 # ========================= 定时扫描任务 =========================
+
 
 def scheduled_scan() -> None:
     global last_scan_result, scan_history
@@ -118,10 +155,15 @@ def scheduled_scan() -> None:
         app.logger.info(f"定时扫描完成: {result}")
     except Exception as exc:
         app.logger.exception("定时扫描失败")
-        last_scan_result = {"status": "error", "message": str(exc), "timestamp": datetime.now().isoformat()}
+        last_scan_result = {
+            "status": "error",
+            "message": str(exc),
+            "timestamp": datetime.now().isoformat(),
+        }
 
 
 # ========================= 视图函数 / API =========================
+
 
 @app.route("/")
 def index():
@@ -138,19 +180,23 @@ def authenticate():
 
 @app.route("/api/status")
 def get_status():
-    return jsonify({
-        "media_path": MEDIA_PATH,
-        "scan_interval": SCAN_INTERVAL,
-        "last_scan": last_scan_result,
-        "scheduler_running": scheduler.running,
-        "total_scans": len(scan_history),
-        "total_whitelist": len(_read_whitelist()),
-    })
+    return jsonify(
+        {
+            "media_path": MEDIA_PATH,
+            "scan_interval": SCAN_INTERVAL,
+            "last_scan": last_scan_result,
+            "scheduler_running": scheduler.running,
+            "total_scans": len(scan_history),
+            "total_whitelist": len(_read_whitelist()),
+        }
+    )
 
 
 @app.route("/api/history")
 def get_history():
-    sorted_history = sorted(scan_history, key=lambda x: x.get("timestamp", ""), reverse=True)
+    sorted_history = sorted(
+        scan_history, key=lambda x: x.get("timestamp", ""), reverse=True
+    )
     return jsonify({"history": sorted_history, "total": len(scan_history)})
 
 
@@ -167,7 +213,11 @@ def manual_scan():
         return jsonify({"success": True, "result": result})
     except Exception as exc:
         app.logger.exception("手动扫描失败")
-        error_result = {"status": "error", "message": str(exc), "timestamp": datetime.now().isoformat()}
+        error_result = {
+            "status": "error",
+            "message": str(exc),
+            "timestamp": datetime.now().isoformat(),
+        }
         last_scan_result = error_result
         return jsonify({"success": False, "result": error_result}), 500
 
@@ -190,13 +240,17 @@ def scan_directory():
     except Exception as exc:
         app.logger.exception("扫描子目录失败")
         error_result = {
-            "status": "error", "message": str(exc), "timestamp": datetime.now().isoformat(), "target": sub_path,
+            "status": "error",
+            "message": str(exc),
+            "timestamp": datetime.now().isoformat(),
+            "target": sub_path,
         }
         last_scan_result = error_result
         return jsonify({"success": False, "result": error_result}), 500
 
 
 # ---------- 正则配置 ----------
+
 
 @app.route("/api/regex-patterns", methods=["GET"])
 def get_regex_patterns():
@@ -214,7 +268,15 @@ def update_regex_patterns():
     if not isinstance(payload, dict):
         return jsonify({"success": False, "message": "请求体必须为 JSON 对象"}), 400
     if not {"season_episode", "episode_only"}.issubset(payload.keys()):
-        return jsonify({"success": False, "message": "缺少必要字段: season_episode / episode_only"}), 400
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "message": "缺少必要字段: season_episode / episode_only",
+                }
+            ),
+            400,
+        )
     try:
         save_regex_patterns(payload)
         return jsonify({"success": True, "message": "正则配置已更新"})
@@ -225,6 +287,7 @@ def update_regex_patterns():
 
 # ---------- 白名单 ----------
 
+
 @app.route("/api/whitelist", methods=["POST"])
 def add_to_whitelist():
     data = request.get_json(silent=True) or {}
@@ -234,7 +297,9 @@ def add_to_whitelist():
     try:
         entries = _read_whitelist()
         if file_path in entries:
-            return jsonify({"success": True, "inserted": False, "message": "已在白名单中"})
+            return jsonify(
+                {"success": True, "inserted": False, "message": "已在白名单中"}
+            )
         entries.add(file_path)
         _write_whitelist(entries)
         return jsonify({"success": True, "inserted": True, "message": "加入白名单成功"})
@@ -251,6 +316,8 @@ def get_whitelist():
     except Exception as exc:
         app.logger.exception("读取白名单失败")
         return jsonify({"success": False, "message": str(exc)}), 500
+
+
 @app.route("/api/whitelist", methods=["DELETE"])
 def delete_from_whitelist():
     data = request.get_json(silent=True) or {}
@@ -260,7 +327,9 @@ def delete_from_whitelist():
     try:
         entries = _read_whitelist()
         if file_path not in entries:
-            return jsonify({"success": True, "removed": False, "message": "不在白名单中"})
+            return jsonify(
+                {"success": True, "removed": False, "message": "不在白名单中"}
+            )
         entries.remove(file_path)
         _write_whitelist(entries)
         return jsonify({"success": True, "removed": True, "message": "移出白名单成功"})
@@ -296,7 +365,7 @@ def get_change_records():
                         season_records = json.load(f)
                     for rec in season_records:
                         if rec.get("status") == "skip":
-                            continue              # ★ 排除 skip
+                            continue  # ★ 排除 skip
                         rec["media_type"] = media_type_dir.name
                         rec["show"] = show_dir.name
                         rec["season"] = season_dir.name
@@ -309,6 +378,7 @@ def get_change_records():
 
     return jsonify({"records": records[:200], "total": len(records)})
 
+
 @app.route("/api/logs")
 def get_logs():
     log_dir = Path(LOGS_PATH)
@@ -317,7 +387,13 @@ def get_logs():
     logs = []
     for log_file in sorted(log_dir.glob("*.log"), reverse=True):
         stat = log_file.stat()
-        logs.append({"name": log_file.name, "size": stat.st_size, "modified": datetime.fromtimestamp(stat.st_mtime).isoformat()})
+        logs.append(
+            {
+                "name": log_file.name,
+                "size": stat.st_size,
+                "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+            }
+        )
     return jsonify({"logs": logs})
 
 
@@ -331,13 +407,16 @@ def get_log_content(filename: str):
         with log_file.open("r", encoding="utf-8") as f:
             lines = f.readlines()
         content = "".join(lines[-1000:])
-        return jsonify({"filename": filename, "content": content, "total_lines": len(lines)})
+        return jsonify(
+            {"filename": filename, "content": content, "total_lines": len(lines)}
+        )
     except Exception as exc:
         app.logger.exception("读取日志失败")
         return jsonify({"error": f"读取日志失败: {exc}"}), 500
 
 
 # ========================= 日志配置 & 应用启动 =========================
+
 
 def setup_logging() -> None:
     if app.debug:
@@ -346,7 +425,9 @@ def setup_logging() -> None:
     log_dir.mkdir(parents=True, exist_ok=True)
     file_handler = logging.FileHandler(log_dir / "app.log", encoding="utf-8")
     file_handler.setLevel(logging.INFO)
-    file_handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+    file_handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    )
     app.logger.addHandler(file_handler)
     app.logger.setLevel(logging.INFO)
 
@@ -355,7 +436,14 @@ if __name__ == "__main__":
     setup_logging()
     load_history()
     if not scheduler.running:
-        scheduler.add_job(func=scheduled_scan, trigger="interval", seconds=SCAN_INTERVAL, id="scan_job", name="文件扫描任务", replace_existing=True)
+        scheduler.add_job(
+            func=scheduled_scan,
+            trigger="interval",
+            seconds=SCAN_INTERVAL,
+            id="scan_job",
+            name="文件扫描任务",
+            replace_existing=True,
+        )
         scheduler.start()
         app.logger.info(f"定时任务已启动，扫描间隔: {SCAN_INTERVAL} 秒")
     port = int(os.getenv("FLASK_PORT", 15000))

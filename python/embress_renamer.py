@@ -13,8 +13,8 @@ import datetime
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Set
 
-LOGS_PATH = r"E:\\Videos\\测试\\logs"
-MEDIA_PATH = os.getenv("MEDIA_PATH", "E:\\Videos\\测试\\A")
+LOGS_PATH = os.getenv("LOG_PATH", "E:\\Videos\\测试\\A")
+MEDIA_PATH = os.getenv("MEDIA_PATH", "E:\\Videos\\测试\\logs")
 REGEX_PATH = os.getenv("REGEX_PATH", "regex_patterns.json")
 WHITELIST_PATH = os.getenv("WHITELIST_PATH", "whitelist.json")
 
