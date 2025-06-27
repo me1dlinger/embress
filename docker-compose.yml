@@ -1,4 +1,4 @@
-version: '3'
+version: "3"
 services:
   embresse:
     image: embress:1.0.0
@@ -10,10 +10,10 @@ services:
       - _media_path1:/app/media/path1
       - _media_path2:/app/media/path2
       - _logs_path:/app/python/logs
-      - _conf_path/regex_patterns.json:/app/python/conf/regex_patterns.json
     environment:
       - TZ=Asia/Shanghai
       - ACCESS_KEY=ACCESS_KEY
       - MEDIA_PATH=/app/media
       - REGEX_PATH=/app/python/conf/regex_patterns.json
+      - WHITELIST_PATH=/app/python/conf/whitelist.json
       - SCAN_INTERVAL=3600

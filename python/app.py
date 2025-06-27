@@ -24,10 +24,10 @@ from embress_renamer import EmbressRenamer
 app = Flask(__name__)
 
 # ========================= 配置 =========================
-LOGS_PATH = os.getenv("LOG_PATH", "E:\\Videos\\测试\\A")
-MEDIA_PATH = os.getenv("MEDIA_PATH", "E:\\Videos\\测试\\logs")
+LOGS_PATH = os.getenv("LOG_PATH", "/app/python/logs")
+MEDIA_PATH = os.getenv("MEDIA_PATH", "/app/media")
 REGEX_PATH = os.getenv("REGEX_PATH", "regex_patterns.json")
-WHITELIST_PATH = os.getenv("WHITELIST_PATH", "whitelist.json")
+WHITELIST_PATH = os.getenv("WHITELIST_PATH", "/app/python/conf/whitelist.json")
 ACCESS_KEY = os.getenv("ACCESS_KEY", "12345")
 SCAN_INTERVAL = int(os.getenv("SCAN_INTERVAL", 3600))
 HISTORY_FILE = Path(LOGS_PATH) / "scan_history.log"

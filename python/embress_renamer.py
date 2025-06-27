@@ -13,28 +13,31 @@ import datetime
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Set
 
-LOGS_PATH = os.getenv("LOG_PATH", "E:\\Videos\\测试\\A")
-MEDIA_PATH = os.getenv("MEDIA_PATH", "E:\\Videos\\测试\\logs")
+LOGS_PATH = os.getenv("LOG_PATH", "/app/python/logs")
+MEDIA_PATH = os.getenv("MEDIA_PATH", "/app/media")
 REGEX_PATH = os.getenv("REGEX_PATH", "regex_patterns.json")
 WHITELIST_PATH = os.getenv("WHITELIST_PATH", "whitelist.json")
 
 STATUS_RENAMED = "renamed"
 STATUS_FAILED = "failed"
-STATUS_SKIP = "skip"          # 统一用同一个单词
+STATUS_SKIP = "skip"  # 统一用同一个单词
+STATUS_UNMATCHED = "unmatched"  # 统一用同一个单词
 STATUS_WHITELIST = "whitelisted"
 STATUS_UNPROCESSED = "unprocessed"
+
+
 class WhitelistLoader:
     """热加载白名单"""
-    
+
     _cache_mtime: float = 0.0
     _whitelist: Set[str] = set()
-    
+
     @classmethod
     def whitelist(cls) -> Set[str]:
         path = Path(WHITELIST_PATH)
         if not path.exists():
             return set()
-        
+
         mtime = path.stat().st_mtime
         if mtime != cls._cache_mtime:
             try:
@@ -45,7 +48,8 @@ class WhitelistLoader:
             except Exception:
                 cls._whitelist = set()
         return cls._whitelist
-    
+
+
 class RegexLoader:
     """负责把正则表达式从 JSON 文件中读取进来（热加载）"""
 
@@ -181,7 +185,6 @@ class EmbressRenamer:
         p = Path(original)
         return f"{p.stem} [{new_seg}]{p.suffix}"
 
-
     def _rename_file_and_subtitles(self, file_path: Path, new_name: str) -> List[Dict]:
         changes: List[Dict] = []
         new_file = file_path.parent / new_name
@@ -211,7 +214,7 @@ class EmbressRenamer:
                 return changes
 
         subtitle_exts = [".ass", ".srt", ".vtt", ".sub"]
-        lang_suffixes = ["", ".tc",".sc",".chs", ".cht", ".eng", ".jpn"]
+        lang_suffixes = ["", ".tc", ".sc", ".chs", ".cht", ".eng", ".jpn"]
         for ext in subtitle_exts:
             for lang in lang_suffixes:
                 old = file_path.parent / f"{file_path.stem}{lang}{ext}"
@@ -303,7 +306,9 @@ class EmbressRenamer:
         processed_files_list: List[Dict] = []
         total, renamed = 0, 0
 
-        root_path = self.media_path if sub_path is None else (self.media_path / sub_path)
+        root_path = (
+            self.media_path if sub_path is None else (self.media_path / sub_path)
+        )
         if not root_path.exists():
             msg = f"媒体路径不存在: {root_path}"
             self.logger.error(msg)
@@ -316,8 +321,15 @@ class EmbressRenamer:
             }
 
         video_exts = {
-            ".mkv", ".mp4", ".avi", ".mov", ".wmv",
-            ".flv", ".webm", ".ts", ".m2ts",
+            ".mkv",
+            ".mp4",
+            ".avi",
+            ".mov",
+            ".wmv",
+            ".flv",
+            ".webm",
+            ".ts",
+            ".m2ts",
         }
 
         # ---------- ① 直接季目录分支 ----------
@@ -339,8 +351,8 @@ class EmbressRenamer:
 
                 season_info = self._extract_episode_info(file.name)
                 if season_info is None:
-                    file_info["status"]  = STATUS_SKIP
-                    file_info["reason"]  = "no_season_info"
+                    file_info["status"] = STATUS_UNMATCHED
+                    file_info["reason"] = "no_episode_info"
                     processed_files_list.append(file_info)
                     continue
 
@@ -351,11 +363,13 @@ class EmbressRenamer:
                 if new_name != file.name:
                     changes = self._rename_file_and_subtitles(file, new_name)
                     if self._count_success_renames(changes):
-                        file_info.update({
-                            "status":        STATUS_RENAMED,
-                            "original_name": file.name,
-                            "new_name":      new_name,
-                        })
+                        file_info.update(
+                            {
+                                "status": STATUS_RENAMED,
+                                "original_name": file.name,
+                                "new_name": new_name,
+                            }
+                        )
                         renamed += 1
                     else:
                         file_info["status"] = STATUS_FAILED
@@ -396,22 +410,24 @@ class EmbressRenamer:
 
                             abs_path = str(f.absolute())
                             if abs_path in whitelist:
-                                processed_files_list.append({
-                                    "path":   abs_path,
-                                    "status": STATUS_WHITELIST,
-                                })
+                                processed_files_list.append(
+                                    {
+                                        "path": abs_path,
+                                        "status": STATUS_WHITELIST,
+                                    }
+                                )
                                 continue
 
                             file_info = {
-                                "path":   abs_path,
+                                "path": abs_path,
                                 "status": STATUS_UNPROCESSED,
                             }
                             total += 1
 
                             info = self._extract_episode_info(f.name)
                             if info is None:
-                                file_info["status"] = STATUS_SKIP
-                                file_info["reason"] = "no_season_info"
+                                file_info["status"] = STATUS_UNMATCHED
+                                file_info["reason"] = "no_episode_info"
                                 processed_files_list.append(file_info)
                                 continue
 
@@ -423,16 +439,20 @@ class EmbressRenamer:
                             if new_name != f.name:
                                 changes = self._rename_file_and_subtitles(f, new_name)
                                 if self._count_success_renames(changes):
-                                    file_info.update({
-                                        "status":        STATUS_RENAMED,
-                                        "original_name": f.name,
-                                        "new_name":      new_name,
-                                    })
+                                    file_info.update(
+                                        {
+                                            "status": STATUS_RENAMED,
+                                            "original_name": f.name,
+                                            "new_name": new_name,
+                                        }
+                                    )
                                     renamed += 1
                                 else:
                                     file_info["status"] = STATUS_FAILED
                                     file_info["errors"] = [
-                                        c.get("error") for c in changes if c.get("error")
+                                        c.get("error")
+                                        for c in changes
+                                        if c.get("error")
                                     ]
                             else:
                                 file_info["status"] = STATUS_SKIP
@@ -450,6 +470,7 @@ class EmbressRenamer:
 
         # ---------- ③ 统计未重命名 ----------
         finished_statuses = {STATUS_RENAMED, STATUS_WHITELIST, STATUS_SKIP}
+        self.logger.info(processed_files_list)
         unrenamed_files = [
             {"path": f["path"]}
             for f in processed_files_list
@@ -457,13 +478,13 @@ class EmbressRenamer:
         ]
 
         return {
-            "status":            "completed",
-            "processed":         total,
-            "renamed":           renamed,
-            "unrenamed_count":   len(unrenamed_files),
-            "unrenamed_files":   unrenamed_files,
-            "timestamp":         datetime.datetime.now().isoformat(),
-            "target":            str(sub_path or "ALL"),
+            "status": "completed",
+            "processed": total,
+            "renamed": renamed,
+            "unrenamed_count": len(unrenamed_files),
+            "unrenamed_files": unrenamed_files,
+            "timestamp": datetime.datetime.now().isoformat(),
+            "target": str(sub_path or "ALL"),
         }
 
 
@@ -471,4 +492,6 @@ if __name__ == "__main__":
     import sys
 
     root = sys.argv[1] if len(sys.argv) > 1 else MEDIA_PATH
-    print(json.dumps(EmbressRenamer(root).scan_and_rename(), ensure_ascii=False, indent=2))
+    print(
+        json.dumps(EmbressRenamer(root).scan_and_rename(), ensure_ascii=False, indent=2)
+    )

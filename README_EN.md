@@ -85,14 +85,30 @@ docker run -d \
   -v ${media_path1}:/app/media/path1 \
   -v ${media_path2}:/app/media/path2 \
   -v ${logs_path}:/app/python/logs \
-  -v ${conf_path}/regex_patterns.json:/app/python/conf/regex_patterns.json \
   -e TZ=Asia/Shanghai \
   -e ACCESS_KEY=${ACCESS_KEY} \
   -e MEDIA_PATH=/app/media \
   -e REGEX_PATH=/app/python/conf/regex_patterns.json \
+  -e WHITELIST_PATH=/app/python/conf/whitelist.json \
   -e SCAN_INTERVAL=3600 \
   embress:latest
 ```
+
+${media_path1}: Media library directory 1
+
+${media_path2}: Media library directory 2
+
+${logs_path}: Python logs directory, scan record persistence directory
+
+${ACCESS_KEY}: Access key
+
+SCAN_INTERVAL: Scan interval in seconds
+
+MEDIA_PATH: Container media library root directory (default: /app/media)
+
+REGEX_PATH: Program regex configuration path (default: /app/python/conf/regex_patterns.json)
+
+WHITELIST_PATH: Program filename whitelist configuration path (default: /app/python/conf/whitelist.json)
 
 ### Run with Docker Compose
 ```
@@ -108,18 +124,26 @@ services:
       - ${media_path1}:/app/media/path1
       - ${media_path2}:/app/media/path2
       - ${logs_path}:/app/python/logs
-      - ${conf_path}/regex_patterns.json:/app/python/conf/regex_patterns.json
     environment:
       - TZ=Asia/Shanghai
       - ACCESS_KEY=${ACCESS_KEY}
       - MEDIA_PATH=/app/media
       - REGEX_PATH=/app/python/conf/regex_patterns.json
+      - WHITELIST_PATH=/app/python/conf/whitelist.json
       - SCAN_INTERVAL=3600
 ```
 
 ## 🧩 界面截图
 
 ![1](screenshots/1.png)
+
+![1.5](screenshots/1.5.png)
+
+![1.6](screenshots/1.6.png)
+
+![1.7](screenshots/1.7.png)
+
+![1.8](screenshots/1.8.png)
 
 ![2](screenshots/2.png)
 

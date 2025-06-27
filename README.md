@@ -90,11 +90,11 @@ docker run -d \
   -v ${media_path1}:/app/media/path1 \
   -v ${media_path2}:/app/media/path2 \
   -v ${logs_path}:/app/python/logs \
-  -v ${conf_path}/regex_patterns.json:/app/python/conf/regex_patterns.json \
   -e TZ=Asia/Shanghai \
   -e ACCESS_KEY=${ACCESS_KEY} \
   -e MEDIA_PATH=/app/media \
   -e REGEX_PATH=/app/python/conf/regex_patterns.json \
+  -e WHITELIST_PATH=/app/python/conf/whitelist.json \
   -e SCAN_INTERVAL=3600 \
   embress:latest
 ```
@@ -105,12 +105,15 @@ ${media_path2}：影视库目录2
 
 ${logs_path}：python日志目录，扫描记录持久化目录
 
-${conf_path}：正则等配置目录
-
 ${ACCESS_KEY}：访问秘钥
 
 SCAN_INTERVAL：扫描间隔，单位秒
 
+MEDIA_PATH:容器影视库根目录，默认是/app/media
+
+REGEX_PATH:程序正则配置地址，默认/app/python/conf/regex_patterns.json
+
+WHITELIST_PATH：程序文件名白名单配置地址，默认/app/python/conf/whitelist.json
 
 ### docker-compose配置
 ```
@@ -126,18 +129,26 @@ services:
       - ${media_path1}:/app/media/path1
       - ${media_path2}:/app/media/path2
       - ${logs_path}:/app/python/logs
-      - ${conf_path}/regex_patterns.json:/app/python/conf/regex_patterns.json
     environment:
       - TZ=Asia/Shanghai
       - ACCESS_KEY=${ACCESS_KEY}
       - MEDIA_PATH=/app/media
       - REGEX_PATH=/app/python/conf/regex_patterns.json
+      - WHITELIST_PATH=/app/python/conf/whitelist.json
       - SCAN_INTERVAL=3600
 ```
 
 ## 🧩 界面截图
 
 ![1](screenshots/1.png)
+
+![1.5](screenshots/1.5.png)
+
+![1.6](screenshots/1.6.png)
+
+![1.7](screenshots/1.7.png)
+
+![1.8](screenshots/1.8.png)
 
 ![2](screenshots/2.png)
 
