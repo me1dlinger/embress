@@ -171,18 +171,35 @@
                       <span>操作面板</span>
                     </div>
                     <div class="card-body">
-                      <button class="btn btn-success w-100 mb-3" @click="performManualScan" :disabled="scanLoading">
-                        <span v-if="scanLoading" class="spinner-border spinner-border-sm" role="status"></span>
-                        <i v-else class="bi bi-search me-2"></i>
-                        [[ scanLoading ? '扫描中...' : '手动全部扫描' ]]
-                      </button>
-                      <button class="btn btn-info w-100 mb-3" @click="showSubPathModal = true">
+                      <div class="row mt-4">
+                        <div class="col-6">
+                          <button class="btn btn-success w-100 mb-3" @click="performManualScan" :disabled="scanLoading">
+                            <span v-if="scanLoading" class="spinner-border spinner-border-sm" role="status"></span>
+                            <i v-else class="bi bi-search me-2"></i>
+                            [[ scanLoading ? '扫描中...' : '手动全部扫描' ]]
+                          </button>
+                        </div>
+                        <div class="col-6">
+                          <button class="btn btn-warning w-100 mb-3" @click="showRegexConfig">
+                            <i class="bi bi-gear me-2"></i>正则配置
+                          </button>
+                        </div>
+                      </div>
+                      <div class="row mt-4">
+                        <div class="col-6">
+                          <button class="btn btn-info w-100 mb-3" @click="showSubPathModal = true">
 
-                        <span style="color: white;"><i class="bi bi-folder2-open me-2"></i>指定路径扫描</span>
-                      </button>
-                      <button class="btn btn-warning w-100 mb-3" @click="showRegexConfig">
-                        <i class="bi bi-gear me-2"></i>正则配置
-                      </button>
+                            <span style="color: white;"><i class="bi bi-folder2-open me-2"></i>指定路径扫描</span>
+                          </button>
+
+                        </div>
+                        <div class="col-6">
+                          <button class="btn btn-info w-100 mb-3" @click="showSubPathRollbackModal = true">
+                            <span style="color: white;"><i class="bi bi-folder2-open me-2"></i>指定路径还原</span>
+                          </button>
+                        </div>
+                      </div>
+
                     </div>
                   </div>
                 </div>
@@ -357,7 +374,11 @@
                           <div class="d-flex justify-content-between align-items-start">
                             <div class="flex-grow-1">
                               <h6 class="mb-1">
-                                <i class="bi"
+                                <span v-if="record.rollback" > 
+                                  <i class="bi bi-arrow-counterclockwise text-warning"></i>
+                                  [已回滚] 
+                                </span>
+                                <i v-else class="bi"
                                   :class="record.status === 'success' ? 'bi-check-circle text-success' : 'bi-x-circle text-danger'"></i>
                                 [[ record.type === 'rename' ? '文件重命名' :
                                 '字幕重命名' ]]
@@ -476,6 +497,32 @@
             <button class="btn btn-primary" @click="performSubScan" :disabled="subScanLoading">
               <span v-if="subScanLoading" class="spinner-border spinner-border-sm"></span>
               <span v-else>扫描</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+    <transition name="fade">
+      <div v-if="showSubPathRollbackModal" class="modal-overlay" @click.self="closeSubPathRollbackModal"
+        @keydown.esc="closeSubPathModal" tabindex="0">
+        <div class="modal-content-custom animated">
+          <div class="modal-header">
+            <h5 class="modal-title">
+              <i class="bi bi-folder2-open me-2"></i> 指定路径还原
+            </h5>
+            <button type="button" class="btn-close" @click="closeSubPathRollbackModal"></button>
+          </div>
+
+          <div class="modal-body">
+            <label class="form-label fw-medium mb-2">子路径</label>
+            <input type="text" class="form-control" v-model="subPath" placeholder="例如：Anime/葬送的芙莉莲/Season 01"
+              autocomplete="off" />
+          </div>
+
+          <div class="modal-footer">
+            <button class="btn btn-primary" @click="performSubRollBack" :disabled="subScanLoading">
+              <span v-if="subScanLoading" class="spinner-border spinner-border-sm"></span>
+              <span v-else>回滚</span>
             </button>
           </div>
         </div>

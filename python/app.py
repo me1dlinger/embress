@@ -8,28 +8,19 @@
 import os
 import json
 import logging
-import tempfile
 from pathlib import Path
-import shutil
-import time
-from datetime import datetime
-from threading import Lock
-from typing import Set, List
-
+import datetime
 from flask import Flask, render_template, request, jsonify
 from apscheduler.schedulers.background import BackgroundScheduler
-
 from embress_renamer import EmbressRenamer
+from database import config_db
 
 app = Flask(__name__)
 
-LOGS_PATH = os.getenv("LOG_PATH", "/app/python/logs")
-MEDIA_PATH = os.getenv("MEDIA_PATH", "/app/media")
-REGEX_PATH = os.getenv("REGEX_PATH", "regex_patterns.json")
-WHITELIST_PATH = os.getenv("WHITELIST_PATH", "/app/python/conf/whitelist.json")
+LOGS_PATH = os.getenv("LOG_PATH", "./logs")
+MEDIA_PATH = os.getenv("MEDIA_PATH", "./media")
 ACCESS_KEY = os.getenv("ACCESS_KEY", "12345")
 SCAN_INTERVAL = int(os.getenv("SCAN_INTERVAL", 3600))
-HISTORY_FILE = Path(LOGS_PATH) / "scan_history.log"
 
 MAX_RETRIES = 3
 RETRY_DELAY = 0.5
@@ -38,114 +29,20 @@ RETRY_DELAY = 0.5
 renamer = EmbressRenamer(MEDIA_PATH)
 scheduler = BackgroundScheduler()
 
-last_scan_result = None
-scan_history: List[dict] = []
-
-history_lock = Lock()
-regex_lock = Lock()
-whitelist_lock = Lock() 
-
-def load_history() -> None:
-    global scan_history, last_scan_result
-    if HISTORY_FILE.exists():
-        with HISTORY_FILE.open("r", encoding="utf-8") as f:
-            payload = json.load(f)
-        scan_history = payload.get("history", [])
-        last_scan_result = payload.get("last_scan")
-
-
-def persist_history() -> None:
-    with history_lock:
-        with HISTORY_FILE.open("w", encoding="utf-8") as f:
-            json.dump(
-                {"history": scan_history, "last_scan": last_scan_result},
-                f,
-                ensure_ascii=False,
-                indent=2,
-            )
-
-
-
-def load_regex_patterns() -> dict:
-    path = Path(REGEX_PATH)
-    if not path.exists():
-        return {}
-    with regex_lock, path.open("r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-def save_regex_patterns(patterns: dict) -> None:
-    path = Path(REGEX_PATH)
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    for attempt in range(MAX_RETRIES):
-        try:
-            # 创建带.json后缀的临时文件
-            with tempfile.NamedTemporaryFile(
-                "w",
-                delete=False,
-                dir=str(path.parent),
-                encoding="utf-8",
-                suffix=".json",
-            ) as tmp:
-                json.dump(patterns, tmp, ensure_ascii=False, indent=2)
-                tmp_name = tmp.name
-
-            shutil.copy(tmp_name, str(path))
-            os.unlink(tmp_name)  # 删除临时文件
-            return
-        except (OSError, IOError) as e:
-            app.logger.warning(
-                f"保存正则配置失败 (尝试 {attempt+1}/{MAX_RETRIES}): {str(e)}"
-            )
-            time.sleep(RETRY_DELAY)
-
-    app.logger.error(f"保存正则配置失败，超过最大重试次数")
-
-
-def _read_whitelist() -> Set[str]:
-    path = Path(WHITELIST_PATH)
-    if not path.exists():
-        return set()
-    with whitelist_lock, path.open("r", encoding="utf-8") as f:
-        try:
-            data = json.load(f)
-            if isinstance(data, list):
-                return set(map(str, data))
-            return set()
-        except json.JSONDecodeError:
-            return set()
-
-
-def _write_whitelist(entries: Set[str]) -> None:
-    path = Path(WHITELIST_PATH)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with whitelist_lock, tempfile.NamedTemporaryFile(
-        "w", delete=False, dir=str(path.parent), encoding="utf-8"
-    ) as tmp:
-        json.dump(sorted(entries), tmp, ensure_ascii=False, indent=2)
-        tmp_name = tmp.name
-    os.replace(tmp_name, path)
-
-
-
 def scheduled_scan() -> None:
-    global last_scan_result, scan_history
     try:
         app.logger.info("开始定时扫描 … …")
         result = renamer.scan_and_rename()
-        last_scan_result = result
-        scan_history.append(result)
-        scan_history = scan_history[-50:]
-        persist_history()
+        config_db.add_scan_history(result)
         app.logger.info(f"定时扫描完成: {result}")
     except Exception as exc:
         app.logger.exception("定时扫描失败")
-        last_scan_result = {
+        error_result = {
             "status": "error",
             "message": str(exc),
             "timestamp": datetime.now().isoformat(),
         }
+        config_db.add_scan_history(error_result)
 
 
 @app.route("/")
@@ -160,39 +57,31 @@ def authenticate():
         return jsonify({"success": True, "message": "验证成功"})
     return jsonify({"success": False, "message": "访问密钥错误"})
 
-
 @app.route("/api/status")
 def get_status():
     return jsonify(
         {
             "media_path": MEDIA_PATH,
             "scan_interval": SCAN_INTERVAL,
-            "last_scan": last_scan_result,
+            "last_scan": config_db.get_last_scan_result(),
             "scheduler_running": scheduler.running,
-            "total_scans": len(scan_history),
-            "total_whitelist": len(_read_whitelist()),
+            "total_scans": len(config_db.get_scan_history()),
+            "total_whitelist": len(config_db.get_whitelist()),
         }
     )
 
 
 @app.route("/api/history")
 def get_history():
-    sorted_history = sorted(
-        scan_history, key=lambda x: x.get("timestamp", ""), reverse=True
-    )
-    return jsonify({"history": sorted_history, "total": len(scan_history)})
-
+    history = config_db.get_scan_history()
+    return jsonify({"history": history, "total": len(history)})
 
 @app.route("/api/manual-scan", methods=["POST"])
 def manual_scan():
-    global last_scan_result, scan_history
     try:
         app.logger.info("开始手动扫描 … …")
         result = renamer.scan_and_rename()
-        last_scan_result = result
-        scan_history.append(result)
-        scan_history = scan_history[-50:]
-        persist_history()
+        config_db.add_scan_history(result)
         return jsonify({"success": True, "result": result})
     except Exception as exc:
         app.logger.exception("手动扫描失败")
@@ -201,42 +90,141 @@ def manual_scan():
             "message": str(exc),
             "timestamp": datetime.now().isoformat(),
         }
-        last_scan_result = error_result
+        config_db.add_scan_history(error_result)
         return jsonify({"success": False, "result": error_result}), 500
-
 
 @app.route("/api/scan-directory", methods=["POST"])
 def scan_directory():
-    global last_scan_result, scan_history
+   data = request.get_json(silent=True) or {}
+   sub_path = data.get("sub_path")
+   if not sub_path:
+       return jsonify({"success": False, "message": "缺少 sub_path"}), 400
+   try:
+       app.logger.info(f"开始扫描子目录: {sub_path}")
+       result = renamer.scan_and_rename(sub_path=sub_path)
+       config_db.add_scan_history(result)
+       return jsonify({"success": True, "result": result})
+   except Exception as exc:
+       app.logger.exception("扫描子目录失败")
+       error_result = {
+           "status": "error",
+           "message": str(exc),
+           "timestamp": datetime.now().isoformat(),
+           "target": sub_path,
+       }
+       config_db.add_scan_history(error_result)
+       return jsonify({"success": False, "result": error_result}), 500
+
+@app.route("/api/rollback-season", methods=["POST"])
+def rollback_season():
     data = request.get_json(silent=True) or {}
     sub_path = data.get("sub_path")
     if not sub_path:
         return jsonify({"success": False, "message": "缺少 sub_path"}), 400
+
+    season_dir = Path(MEDIA_PATH) / sub_path
+    rename_record_path = season_dir / "rename_record.json"
+    rollback_record_path = season_dir / "rollback.json"
+
+    if not season_dir.exists():
+        return jsonify({"success": False, "message": "Season 目录不存在"}), 404
+    if not rename_record_path.exists():
+        return jsonify({"success": False, "message": "未找到 rename_record.json"}), 404
+
     try:
-        app.logger.info(f"开始扫描子目录: {sub_path}")
-        result = renamer.scan_and_rename(sub_path=sub_path)
-        last_scan_result = result
-        scan_history.append(result)
-        scan_history = scan_history[-50:]
-        persist_history()
-        return jsonify({"success": True, "result": result})
+        original_records = json.loads(rename_record_path.read_text(encoding="utf-8"))
     except Exception as exc:
-        app.logger.exception("扫描子目录失败")
-        error_result = {
-            "status": "error",
-            "message": str(exc),
-            "timestamp": datetime.now().isoformat(),
-            "target": sub_path,
-        }
-        last_scan_result = error_result
-        return jsonify({"success": False, "result": error_result}), 500
+        app.logger.exception("读取变更记录失败")
+        return jsonify({"success": False, "message": f"读取记录失败: {exc}"}), 500
+
+    rollback_results = []
+    rolled_back_cnt = 0
+
+    for rec in original_records:
+        if rec.get("type")!="rename" or rec.get("status") != "success" or rec.get("rollback") is True:
+            continue
+        cur_path = Path(rec["path"])
+        original_name = rec["original"]
+        if not cur_path.exists():
+            rollback_results.append({
+                "type": "rollback",
+                "original": rec["new"],
+                "new": original_name,
+                "status": "failed",
+                "error": "文件不存在",
+                "timestamp": datetime.now().isoformat(),
+                "path": rec["path"]
+            })
+            continue
+
+        try:
+            changes = renamer._rename_file_and_subtitles(cur_path, original_name)
+            if renamer._count_success_renames(changes):
+                rolled_back_cnt += 1
+                rollback_result = {
+                    "type": "rollback",
+                    "original": rec["new"],
+                    "new": original_name,
+                    "status": "rolled_back",
+                    "timestamp": datetime.now().isoformat(),
+                    "path": str((cur_path.parent / original_name).absolute())
+                }
+                rollback_results.append(rollback_result)
+                rec["rollback"] = True
+            else:
+                rollback_results.append({
+                    "type": "rollback",
+                    "original": rec["new"],
+                    "new": original_name,
+                    "status": "failed",
+                    "error": "重命名失败",
+                    "timestamp": datetime.now().isoformat(),
+                    "path": rec["path"]
+                })
+        except Exception as exc:
+            app.logger.exception("回滚出错")
+            rollback_results.append({
+                "type": "rollback",
+                "original": rec["new"],
+                "new": original_name,
+                "status": "failed",
+                "error": str(exc),
+                "timestamp": datetime.now().isoformat(),
+                "path": rec["path"]
+            })
+    try:
+        rename_record_path.write_text(
+            json.dumps(original_records, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except Exception as exc:
+        app.logger.exception("更新 rename_record.json 标记失败")
+    if rollback_results:
+        existing = []
+        if rollback_record_path.exists():
+            try:
+                existing = json.loads(rollback_record_path.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        try:
+            all_records = existing + rollback_results
+            rollback_record_path.write_text(
+                json.dumps(all_records, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+        except Exception as exc:
+            app.logger.exception("写入 rollback.json 失败")
+
+    return jsonify({
+        "success": True,
+        "rolled_back": rolled_back_cnt,
+        "results": rollback_results
+    })
 
 
 
 @app.route("/api/regex-patterns", methods=["GET"])
 def get_regex_patterns():
     try:
-        patterns = load_regex_patterns()
+        patterns = config_db.get_regex_patterns()
         return jsonify({"success": True, "patterns": patterns})
     except Exception as exc:
         app.logger.exception("读取正则配置失败")
@@ -259,7 +247,7 @@ def update_regex_patterns():
             400,
         )
     try:
-        save_regex_patterns(payload)
+        config_db.update_regex_patterns(payload)
         return jsonify({"success": True, "message": "正则配置已更新"})
     except Exception as exc:
         app.logger.exception("写入正则配置失败")
@@ -274,14 +262,9 @@ def add_to_whitelist():
     if not file_path:
         return jsonify({"success": False, "message": "缺少 file_path"}), 400
     try:
-        entries = _read_whitelist()
-        if file_path in entries:
-            return jsonify(
-                {"success": True, "inserted": False, "message": "已在白名单中"}
-            )
-        entries.add(file_path)
-        _write_whitelist(entries)
-        return jsonify({"success": True, "inserted": True, "message": "加入白名单成功"})
+        inserted = config_db.add_to_whitelist(file_path)
+        message = "加入白名单成功" if inserted else "已在白名单中"
+        return jsonify({"success": True, "inserted": inserted, "message": message})
     except Exception as exc:
         app.logger.exception("写入白名单失败")
         return jsonify({"success": False, "message": str(exc)}), 500
@@ -290,7 +273,7 @@ def add_to_whitelist():
 @app.route("/api/whitelist", methods=["GET"])
 def get_whitelist():
     try:
-        entries = sorted(_read_whitelist())
+        entries = sorted(config_db.get_whitelist())
         return jsonify({"success": True, "whitelist": entries})
     except Exception as exc:
         app.logger.exception("读取白名单失败")
@@ -304,54 +287,52 @@ def delete_from_whitelist():
     if not file_path:
         return jsonify({"success": False, "message": "缺少 file_path"}), 400
     try:
-        entries = _read_whitelist()
-        if file_path not in entries:
-            return jsonify(
-                {"success": True, "removed": False, "message": "不在白名单中"}
-            )
-        entries.remove(file_path)
-        _write_whitelist(entries)
-        return jsonify({"success": True, "removed": True, "message": "移出白名单成功"})
+        removed = config_db.remove_from_whitelist(file_path)
+        message = "移出白名单成功" if removed else "不在白名单中"
+        return jsonify({"success": True, "removed": removed, "message": message})
     except Exception as exc:
         app.logger.exception("写入白名单失败")
         return jsonify({"success": False, "message": str(exc)}), 500
 
 @app.route("/api/change-records")
 def get_change_records():
-    """获取所有变更记录（排除 skip）"""
+    """获取所有变更记录（排除 skip，优先最新的 rename_record_*.json）"""
     records = []
     media_path = Path(MEDIA_PATH)
+
     if not media_path.exists():
-        return jsonify({"records": []})
+        return jsonify({"records": [], "total": 0})
 
     for media_type_dir in media_path.iterdir():
         if not media_type_dir.is_dir():
             continue
+
         for show_dir in media_type_dir.iterdir():
             if not show_dir.is_dir():
                 continue
+
             for season_dir in show_dir.iterdir():
                 if not season_dir.is_dir():
                     continue
                 record_file = season_dir / "rename_record.json"
                 if not record_file.exists():
                     continue
-
                 try:
-                    with open(record_file, "r", encoding="utf-8") as f:
-                        season_records = json.load(f)
+                    season_records = json.loads(record_file.read_text(encoding="utf-8"))
                     for rec in season_records:
-                        if rec.get("status") == "skip":
-                            continue
-                        rec["media_type"] = media_type_dir.name
-                        rec["show"] = show_dir.name
-                        rec["season"] = season_dir.name
-                        records.append(rec)
+                        if rec.get("status") == "success" and rec.get("type") != "nfo_delete":
+                            rec.update(
+                                media_type=media_type_dir.name,
+                                show=show_dir.name,
+                                season=season_dir.name,
+                                rollback=rec.get("rollback",False)
+                            )
+                            records.append(rec)
+
                 except Exception as e:
                     app.logger.error(f"读取变更记录失败 {record_file}: {e}")
 
     records.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
-
     return jsonify({"records": records[:200], "total": len(records)})
 
 
@@ -367,7 +348,7 @@ def get_logs():
             {
                 "name": log_file.name,
                 "size": stat.st_size,
-                "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                "modified": datetime.datetime.fromtimestamp(stat.st_mtime).isoformat(),
             }
         )
     return jsonify({"logs": logs})
@@ -397,18 +378,15 @@ def setup_logging() -> None:
         return
     log_dir = Path(LOGS_PATH)
     log_dir.mkdir(parents=True, exist_ok=True)
-    file_handler = logging.FileHandler(log_dir / "app.log", encoding="utf-8")
+    log_file = log_dir / f"app_{datetime.datetime.now():%Y%m%d}.log"
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")
     file_handler.setLevel(logging.INFO)
     file_handler.setFormatter(
         logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     )
-    app.logger.addHandler(file_handler)
-    app.logger.setLevel(logging.INFO)
-
 
 if __name__ == "__main__":
     setup_logging()
-    load_history()
     if not scheduler.running:
         scheduler.add_job(
             func=scheduled_scan,

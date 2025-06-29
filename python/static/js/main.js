@@ -37,6 +37,7 @@ new Vue({
 
     logContentError: "",
     showSubPathModal: false,
+    showSubPathRollbackModal: false,
     subPath: "",
     subScanLoading: false,
     showUnrenamedModal: false,
@@ -274,6 +275,10 @@ new Vue({
       this.showSubPathModal = false;
       this.subPath = ""; // 关闭时顺便清空
     },
+    closeSubPathRollbackModal() {
+      this.showSubPathRollbackModal = false;
+      this.subPath = ""; // 关闭时顺便清空
+    },
     async performSubScan() {
       if (!this.subPath.trim()) {
         alert("请输入子路径");
@@ -304,6 +309,41 @@ new Vue({
         }
       } catch (err) {
         console.error("指定路径扫描失败:", err);
+        alert("扫描失败: 网络错误");
+      } finally {
+        this.subScanLoading = false;
+      }
+    },
+    async performSubRollBack() {
+      if (!this.subPath.trim()) {
+        alert("请输入子路径");
+        return;
+      }
+
+      this.subScanLoading = true;
+      try {
+        const resp = await fetch("/api/rollback-season", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sub_path: this.subPath.trim() }),
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+          this.lastScanResult = data.result;
+          // 刷新相关面板
+          this.loadHistory();
+          this.loadChangeRecords();
+          this.loadSystemStatus();
+          // 自动关闭
+          this.closeSubPathRollbackModal();
+        } else {
+          alert(
+            "扫描失败: " + (data.result ? data.result.message : "未知错误")
+          );
+        }
+      } catch (err) {
+        console.error("指定路径回滚失败:", err);
         alert("扫描失败: 网络错误");
       } finally {
         this.subScanLoading = false;
