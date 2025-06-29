@@ -17,7 +17,6 @@
 
 <body>
   <div id="app">
-    <!-- 导航栏 -->
     <nav class="navbar navbar-expand-lg">
       <div class="container app-container">
         <a class="navbar-brand" href="#">
@@ -31,8 +30,6 @@
         </div>
       </div>
     </nav>
-
-    <!-- 认证表单 -->
     <div v-if="!isAuthenticated" class="container app-container" id="auth-container">
       <div class="auth-container">
         <div class="auth-form-container animated">
@@ -64,7 +61,6 @@
       </div>
     </div>
 
-    <!-- 主内容区域 -->
     <div v-if="isAuthenticated" class="container-fluid app-container" id="main-content">
       <div class="row mt-4">
         <div class="col-12">
@@ -131,8 +127,6 @@
                             </span>
 
                           </div>
-
-
                         </div>
                         <div class="row mt-2">
                           <div class="col-6"><strong>扫描间隔:</strong></div>
@@ -528,8 +522,6 @@
         </div>
       </div>
     </transition>
-    <!-- 在现有的指定路径扫描弹窗后面添加 -->
-    <!-- 未重命名文件弹窗 -->
     <transition name="fade">
       <div v-if="showUnrenamedModal" class="modal-overlay" @click.self="closeUnrenamedModal"
         @keydown.esc="closeUnrenamedModal" tabindex="0">
@@ -580,7 +572,6 @@
         </div>
       </div>
     </transition>
-    <!-- 白名单文件弹窗 -->
     <transition name="fade">
       <div v-if="showWhitelistModal" class="modal-overlay" @click.self="closeWhitelistModal"
         @keydown.esc="closeWhitelistModal" tabindex="0">
@@ -591,10 +582,7 @@
             </h5>
             <button type="button" class="btn-close" @click="closeWhitelistModal"></button>
           </div>
-
-          <!-- 在现有白名单弹窗的modal-body中，在文件列表前面添加新增白名单区域 -->
           <div class="modal-body">
-            <!-- 新增白名单区域 -->
             <div class="whitelist-add-section">
               <h6 class="section-title">
                 <i class="bi bi-plus-circle me-2"></i>添加白名单
@@ -625,8 +613,6 @@
               </button>
               <hr>
             </div>
-
-            <!-- 现有白名单文件列表 -->
             <div v-if="whitelistFiles.length === 0 && newWhitelistItems.length === 0"
               class="text-center py-4 text-muted">
               <i class="bi bi-check-circle mb-2" style="font-size: 2rem;"></i>
@@ -642,7 +628,6 @@
               </p>
 
               <div class="whitelist-files-list">
-                <!-- 新增的白名单项 -->
                 <div v-for="(item, index) in newWhitelistItems" :key="'new-' + index"
                   class="whitelist-file-item new-item" >
                   <div class="file-info">
@@ -663,8 +648,6 @@
                     <i class="bi bi-trash me-1"></i>移除
                   </button>
                 </div>
-
-                <!-- 现有的白名单项 -->
                 <div v-for="(file, index) in whitelistFiles" :key="'existing-' + index" class="whitelist-file-item" 
                  :class="file.type === 'file' ? 'file-type' : 'directory-type'">
                   
@@ -694,8 +677,6 @@
               </div>
             </div>
           </div>
-
-          <!-- 在modal-footer中添加提交按钮 -->
           <div class="modal-footer">
             <button class="btn btn-secondary" @click="closeWhitelistModal">关闭</button>
             
@@ -725,9 +706,7 @@
               <div class="spinner-border text-primary" role="status"></div>
             </div>
             <div v-else>
-              <!-- 将两个section包装在row中 -->
               <div class="row">
-                <!-- 左侧：集数模式正则表达式 -->
                 <div class="col-md-6">
                   <div class="regex-section">
                     <div class="regex-section-header">
@@ -760,8 +739,6 @@
                     </div>
                   </div>
                 </div>
-
-                <!-- 右侧：季集模式正则表达式 -->
                 <div class="col-md-6">
                   <div class="regex-section">
                     <div class="regex-section-header">
