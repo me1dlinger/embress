@@ -40,12 +40,12 @@ class WhitelistLoader:
             file_set: Set[str] = set()
             dir_list: List[Path] = []
             for entry in entries:
-                raw = entry["path"].strip().lstrip("/\\") 
-                path = (FULL_MEDIA_PATH/ raw).resolve()
                 if entry.get("type") == "directory":
+                    raw = entry["path"].strip().lstrip("/\\") 
+                    path = (FULL_MEDIA_PATH/ raw).resolve()
                     dir_list.append(path)
                 else:
-                    file_set.add(str(path))
+                    file_set.add(str(entry["path"]))
             cls._cache = {
                 "files": file_set,
                 "dirs": dir_list
