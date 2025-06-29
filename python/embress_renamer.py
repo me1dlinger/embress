@@ -14,8 +14,8 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Set
 from database import config_db
 
-LOGS_PATH = os.getenv("LOG_PATH", "./logs")
-MEDIA_PATH = os.getenv("MEDIA_PATH", "./media")
+LOGS_PATH = os.getenv("LOG_PATH", "./data/logs")
+MEDIA_PATH = os.getenv("MEDIA_PATH", "./data/media")
 
 STATUS_RENAMED = "renamed"
 STATUS_FAILED = "failed"

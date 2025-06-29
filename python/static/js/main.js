@@ -56,6 +56,10 @@ new Vue({
     regexLoading: false,
     regexSaving: false,
     regexError: "",
+    newWhitelistPath: "",
+    newWhitelistType: "file",
+    newWhitelistItems: [],
+    submitWhitelistLoading: false,
   },
 
   mounted() {
@@ -375,7 +379,16 @@ new Vue({
         this.whitelistFiles = [];
       }
     },
-
+    async getWhitelist() {
+      try {
+        const response = await fetch("/api/whitelist");
+        const data = await response.json();
+        this.whitelistFiles = data.whitelist || [];
+      } catch (error) {
+        console.error("加载白名单文件失败:", error);
+        this.whitelistFiles = [];
+      }
+    },
     // 关闭未重命名文件弹窗
     closeWhitelistModal() {
       this.showWhitelistModal = false;
@@ -441,9 +454,8 @@ new Vue({
         const result = await response.json();
 
         if (result.success) {
-          // 移除成功，从白名单中移除该文件
           this.whitelistFiles = this.whitelistFiles.filter(
-            (path) => path !== filePath
+            (file) => file.path !== filePath
           );
 
           // 如果列表为空，关闭弹窗
@@ -463,30 +475,86 @@ new Vue({
         this.deleteFromWhitelistLoading = false;
       }
     },
-    // 提取文件名
-    // 提取文件名（兼容 Windows/Unix）
+    addNewWhitelist() {
+      const path = this.newWhitelistPath.trim();
+      if (!path) return;
+      const exists =
+        this.whitelistFiles.includes(path) ||
+        this.newWhitelistItems.some((item) => item.path === path);
+
+      if (exists) {
+        alert("该路径已在白名单中");
+        return;
+      }
+      this.newWhitelistItems.push({
+        path: path,
+        type: this.newWhitelistType,
+      });
+      this.newWhitelistPath = "";
+      this.newWhitelistType = "file";
+    },
+
+    // 移除新增的白名单项
+    removeNewWhitelistItem(index) {
+      this.newWhitelistItems.splice(index, 1);
+    },
+    getNewWhitelistItems() {
+      return this.newWhitelistItems.map((item) => ({
+        path: item.path,
+        type: item.type,
+        timestamp: new Date().toISOString(),
+      }));
+    },
+
+    async submitNewWhitelistItems() {
+      if (this.newWhitelistItems.length === 0) return;
+      this.addToWhitelistLoading = true;
+      try {
+        const response = await fetch("/api/whitelist", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items: this.getNewWhitelistItems() }),
+        });
+        const result = await response.json();
+
+        if (result.success) {
+          this.newWhitelistItems = [];
+          this.loadSystemStatus();
+          this.loadHistory();
+          this.whi;
+        } else {
+          alert("批量加入白名单失败: " + result.message);
+        }
+      } catch (err) {
+        console.error("批量加入白名单失败:", err);
+        alert("网络错误");
+      } finally {
+        this.addToWhitelistLoading = false;
+        this.getWhitelist();
+      }
+    },
+    closeWhitelistModal() {
+      this.showWhitelistModal = false;
+      this.newWhitelistItems = [];
+      this.newWhitelistPath = "";
+      this.newWhitelistType = "file";
+    },
+
     getFileName(filePath) {
-      // 标准化处理：替换连续分隔符并移除结尾分隔符
       const normalized = filePath.replace(/[\\/]+/g, "/").replace(/\/$/, "");
       return normalized.substring(normalized.lastIndexOf("/") + 1);
     },
 
-    // 提取目录路径（兼容 Windows/Unix）
     getDirectoryPath(filePath) {
-      // 标准化处理：替换连续分隔符并移除结尾分隔符
       const normalized = filePath.replace(/[\\/]+/g, "/").replace(/\/$/, "");
-
       const lastIndex = normalized.lastIndexOf("/");
-      if (lastIndex === -1) return ""; // 无分隔符时返回空字符串
-
+      if (lastIndex === -1) return "";
       const directoryPath = normalized.substring(0, lastIndex);
-
-      // 特殊处理 Windows 盘符路径 (如 C:\)
       if (/^[a-zA-Z]:$/.test(directoryPath)) {
-        return directoryPath + "/"; // 返回 C:/
+        return directoryPath + "/";
       }
 
-      return directoryPath || "/"; // 根目录返回 '/'
+      return directoryPath || "/";
     },
     async showRegexConfig() {
       this.showRegexModal = true;

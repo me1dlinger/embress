@@ -1,0 +1,72 @@
+<svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="primaryGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f093fb;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#f5576c;stop-opacity:1" />
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge> 
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- 背景圆形 -->
+  <circle cx="60" cy="60" r="55" fill="url(#primaryGrad)" opacity="0.1"/>
+  
+  <!-- 主要图标容器 -->
+  <g transform="translate(60,60)">
+    <!-- 文件夹图标 -->
+    <g transform="translate(-25,-15)">
+      <path d="M5 8 L5 35 L45 35 L45 12 L25 12 L20 8 Z" 
+            fill="url(#primaryGrad)" 
+            stroke="none" 
+            opacity="0.8"/>
+      <path d="M5 8 L5 35 L45 35 L45 12 L25 12 L20 8 Z" 
+            fill="none" 
+            stroke="url(#primaryGrad)" 
+            stroke-width="2"/>
+    </g>
+    
+    <!-- 扫描线效果 -->
+    <g opacity="0.7">
+      <line x1="-30" y1="-20" x2="30" y2="-20" stroke="url(#accentGrad)" stroke-width="2">
+        <animate attributeName="opacity" values="0.3;1;0.3" dur="2s" repeatCount="indefinite"/>
+      </line>
+      <line x1="-30" y1="-10" x2="30" y2="-10" stroke="url(#accentGrad)" stroke-width="2">
+        <animate attributeName="opacity" values="0.3;1;0.3" dur="2s" begin="0.3s" repeatCount="indefinite"/>
+      </line>
+      <line x1="-30" y1="0" x2="30" y2="0" stroke="url(#accentGrad)" stroke-width="2">
+        <animate attributeName="opacity" values="0.3;1;0.3" dur="2s" begin="0.6s" repeatCount="indefinite"/>
+      </line>
+      <line x1="-30" y1="10" x2="30" y2="10" stroke="url(#accentGrad)" stroke-width="2">
+        <animate attributeName="opacity" values="0.3;1;0.3" dur="2s" begin="0.9s" repeatCount="indefinite"/>
+      </line>
+    </g>
+    
+    <!-- 媒体播放图标 -->
+    <g transform="translate(15,-5)">
+      <circle cx="0" cy="0" r="12" fill="url(#accentGrad)" opacity="0.9" filter="url(#glow)"/>
+      <polygon points="-4,-6 -4,6 6,0" fill="white"/>
+    </g>
+    
+    <!-- 装饰性几何元素 -->
+    <g opacity="0.4">
+      <circle cx="-35" cy="25" r="3" fill="url(#accentGrad)">
+        <animate attributeName="r" values="2;4;2" dur="3s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="35" cy="-25" r="2" fill="url(#primaryGrad)">
+        <animate attributeName="r" values="1;3;1" dur="2.5s" repeatCount="indefinite"/>
+      </circle>
+    </g>
+  </g>
+  
+  <!-- 底部文字 -->
+  <text x="60" y="95" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="url(#primaryGrad)">EMBRESS</text>
+</svg>

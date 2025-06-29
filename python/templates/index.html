@@ -4,6 +4,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='img/logo-slim.svg') }} ">
+  <link rel="shortcut icon" type="image/x-icon" href="{{ url_for('static', filename='img/logo-slim.svg') }} ">
   <title>文件重命名</title>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet" />
   <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.0/font/bootstrap-icons.min.css"
@@ -176,7 +178,7 @@
                           <button class="btn btn-success w-100 mb-3" @click="performManualScan" :disabled="scanLoading">
                             <span v-if="scanLoading" class="spinner-border spinner-border-sm" role="status"></span>
                             <i v-else class="bi bi-search me-2"></i>
-                            [[ scanLoading ? '扫描中...' : '手动全部扫描' ]]
+                            [[ scanLoading ? '扫描中...' : '全部扫描' ]]
                           </button>
                         </div>
                         <div class="col-6">
@@ -189,13 +191,13 @@
                         <div class="col-6">
                           <button class="btn btn-info w-100 mb-3" @click="showSubPathModal = true">
 
-                            <span style="color: white;"><i class="bi bi-folder2-open me-2"></i>指定路径扫描</span>
+                            <span style="color: white;"><i class="bi bi-folder2-open me-2"></i>指定扫描</span>
                           </button>
 
                         </div>
                         <div class="col-6">
                           <button class="btn btn-info w-100 mb-3" @click="showSubPathRollbackModal = true">
-                            <span style="color: white;"><i class="bi bi-folder2-open me-2"></i>指定路径还原</span>
+                            <span style="color: white;"><i class="bi bi-folder2-open me-2"></i>指定还原</span>
                           </button>
                         </div>
                       </div>
@@ -374,9 +376,9 @@
                           <div class="d-flex justify-content-between align-items-start">
                             <div class="flex-grow-1">
                               <h6 class="mb-1">
-                                <span v-if="record.rollback" > 
+                                <span v-if="record.rollback">
                                   <i class="bi bi-arrow-counterclockwise text-warning"></i>
-                                  [已回滚] 
+                                  [已回滚]
                                 </span>
                                 <i v-else class="bi"
                                   :class="record.status === 'success' ? 'bi-check-circle text-success' : 'bi-x-circle text-danger'"></i>
@@ -592,32 +594,102 @@
             <button type="button" class="btn-close" @click="closeWhitelistModal"></button>
           </div>
 
+          <!-- 在现有白名单弹窗的modal-body中，在文件列表前面添加新增白名单区域 -->
           <div class="modal-body">
-            <div v-if="whitelistFiles.length === 0" class="text-center py-4 text-muted">
+            <!-- 新增白名单区域 -->
+            <div class="whitelist-add-section">
+              <h6 class="section-title">
+                <i class="bi bi-plus-circle me-2"></i>添加白名单
+              </h6>
+              <div class="row mb-3">
+                <div class="col-md-8">
+                  <input type="text" class="form-control" v-model="newWhitelistPath" placeholder="输入文件路径或目录路径..."
+                    @keyup.enter="addNewWhitelist">
+                </div>
+                <div class="col-md-4">
+                  <div class="btn-group w-100" role="group">
+                    <input type="radio" class="btn-check" name="whitelistType" id="file-type" value="file"
+                      v-model="newWhitelistType">
+                    <label class="btn btn-outline-primary btn-sm" for="file-type">
+                      <i class="bi bi-file-earmark me-1"></i>文件
+                    </label>
+
+                    <input type="radio" class="btn-check" name="whitelistType" id="dir-type" value="directory"
+                      v-model="newWhitelistType">
+                    <label class="btn btn-outline-primary btn-sm" for="dir-type">
+                      <i class="bi bi-folder me-1"></i>目录
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <button class="btn btn-primary btn-sm mb-3" @click="addNewWhitelist" :disabled="!newWhitelistPath.trim()">
+                <i class="bi bi-plus-circle me-1"></i>添加到白名单
+              </button>
+              <hr>
+            </div>
+
+            <!-- 现有白名单文件列表 -->
+            <div v-if="whitelistFiles.length === 0 && newWhitelistItems.length === 0"
+              class="text-center py-4 text-muted">
               <i class="bi bi-check-circle mb-2" style="font-size: 2rem;"></i>
               <p>暂无白名单文件</p>
             </div>
             <div v-else>
               <p class="text-muted mb-3">
                 <i class="bi bi-info-circle me-1"></i>
-                共 <strong>[[ whitelistFiles.length ]]</strong> 个文件在白名单中
+                共 <strong>[[ whitelistFiles.length + newWhitelistItems.length ]]</strong> 个项目在白名单中
+                <span v-if="newWhitelistItems.length > 0" class="badge bg-info ms-2">
+                  新增 [[ newWhitelistItems.length ]] 个
+                </span>
               </p>
-              <div class="unrenamed-files-list">
-                <div v-for="(path, index) in whitelistFiles" :key="index" class="unrenamed-file-item">
+
+              <div class="whitelist-files-list">
+                <!-- 新增的白名单项 -->
+                <div v-for="(item, index) in newWhitelistItems" :key="'new-' + index"
+                  class="whitelist-file-item new-item" >
                   <div class="file-info">
                     <div class="file-name">
-                      <i class="bi bi-file-earmark me-2"></i>
-                      <strong>[[ getFileName(path) ]]</strong>
+                      <i class="bi" :class="item.type === 'directory' ? 'bi-folder-fill' : 'bi-file-earmark'" me-2></i>
+                      <strong>[[ getFileName(item.path) ]]</strong>
+                      <span class="badge bg-success ms-2">新增</span>
+                      <span class="badge" :class="item.type === 'directory' ? 'bg-warning' : 'bg-info'" ms-1>
+                        [[ item.type === 'directory' ? '目录' : '文件' ]]
+                      </span>
                     </div>
                     <div class="file-path text-muted">
                       <i class="bi bi-folder me-1"></i>
-                      [[ getDirectoryPath(path) ]]
+                      [[ getDirectoryPath(item.path) ]]
                     </div>
                   </div>
-                  <button class="btn btn-sm btn-outline-primary" @click="deleteFromWhitelist(path)"
+                  <button class="btn btn-sm btn-outline-danger" @click="removeNewWhitelistItem(index)">
+                    <i class="bi bi-trash me-1"></i>移除
+                  </button>
+                </div>
+
+                <!-- 现有的白名单项 -->
+                <div v-for="(file, index) in whitelistFiles" :key="'existing-' + index" class="whitelist-file-item" 
+                 :class="file.type === 'file' ? 'file-type' : 'directory-type'">
+                  
+                  <div v-if="file.type=='file'" class="file-info">
+                    <div class="file-name">
+                      <i class="bi bi-file-earmark me-2"></i>
+                      <strong>[[ getFileName(file.path) ]]</strong>
+                    </div>
+                    <div class="file-path text-muted">
+                      <i class="bi bi-folder me-1"></i>
+                      [[ getDirectoryPath(file.path) ]]
+                    </div>
+                  </div>
+                  <div v-else  class="file-info">
+                    <div class="file-name">
+                      <i class="bi bi-file-earmark me-2"></i>
+                      <strong>[[ file.path ]]</strong>
+                    </div>
+                  </div>
+                  <button class="btn btn-sm btn-outline-primary" @click="deleteFromWhitelist(file.path)"
                     :disabled="deleteFromWhitelistLoading">
                     <span v-if="deleteFromWhitelistLoading" class="spinner-border spinner-border-sm me-1"></span>
-                    <i v-else class="bi bi-plus-circle me-1"></i>
+                    <i v-else class="bi bi-trash me-1"></i>
                     移出白名单
                   </button>
                 </div>
@@ -625,8 +697,16 @@
             </div>
           </div>
 
+          <!-- 在modal-footer中添加提交按钮 -->
           <div class="modal-footer">
             <button class="btn btn-secondary" @click="closeWhitelistModal">关闭</button>
+            
+            <button v-if="newWhitelistItems.length > 0" class="btn btn-success" style="margin-left: 20px;" @click="submitNewWhitelistItems"
+              :disabled="submitWhitelistLoading">
+              <span v-if="submitWhitelistLoading" class="spinner-border spinner-border-sm me-1"></span>
+              <i v-else class="bi bi-check-circle me-1"></i>
+              提交新增项目 ([[ newWhitelistItems.length ]])
+            </button>
           </div>
         </div>
       </div>

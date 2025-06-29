@@ -17,8 +17,8 @@ from database import config_db
 
 app = Flask(__name__)
 
-LOGS_PATH = os.getenv("LOG_PATH", "./logs")
-MEDIA_PATH = os.getenv("MEDIA_PATH", "./media")
+LOGS_PATH = os.getenv("LOG_PATH", "./data/logs")
+MEDIA_PATH = os.getenv("MEDIA_PATH", "./data/media")
 ACCESS_KEY = os.getenv("ACCESS_KEY", "12345")
 SCAN_INTERVAL = int(os.getenv("SCAN_INTERVAL", 3600))
 
@@ -254,26 +254,34 @@ def update_regex_patterns():
         return jsonify({"success": False, "message": str(exc)}), 500
 
 
-
 @app.route("/api/whitelist", methods=["POST"])
 def add_to_whitelist():
     data = request.get_json(silent=True) or {}
+    # 批量优先
+    if "items" in data:
+        try:
+            summary = config_db.add_whitelist_items(data["items"])
+            return jsonify({"success": summary["failed"] == [], **summary})
+        except Exception as exc:
+            app.logger.exception("批量写入白名单失败")
+            return jsonify({"success": False, "message": str(exc)}), 500
+
+    # 兼容单条
     file_path = data.get("file_path")
     if not file_path:
-        return jsonify({"success": False, "message": "缺少 file_path"}), 400
+        return jsonify({"success": False, "message": "缺少 file_path 或 items"}), 400
     try:
         inserted = config_db.add_to_whitelist(file_path)
-        message = "加入白名单成功" if inserted else "已在白名单中"
-        return jsonify({"success": True, "inserted": inserted, "message": message})
+        return jsonify({"success": True, "inserted": inserted,
+                        "message": "加入白名单成功" if inserted else "已在白名单中"})
     except Exception as exc:
         app.logger.exception("写入白名单失败")
         return jsonify({"success": False, "message": str(exc)}), 500
 
-
 @app.route("/api/whitelist", methods=["GET"])
 def get_whitelist():
     try:
-        entries = sorted(config_db.get_whitelist())
+        entries = config_db.get_whitelist()
         return jsonify({"success": True, "whitelist": entries})
     except Exception as exc:
         app.logger.exception("读取白名单失败")
@@ -296,7 +304,6 @@ def delete_from_whitelist():
 
 @app.route("/api/change-records")
 def get_change_records():
-    """获取所有变更记录（排除 skip，优先最新的 rename_record_*.json）"""
     records = []
     media_path = Path(MEDIA_PATH)
 

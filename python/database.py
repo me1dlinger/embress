@@ -3,8 +3,9 @@ from pathlib import Path
 import os
 import json
 import threading
+from datetime import datetime
 
-CONFIG_DB_PATH = os.getenv("CONFIG_DB_PATH", "conf/config.db")
+CONFIG_DB_PATH = os.getenv("CONFIG_DB_PATH", "data/conf/config.db")
 DEFAULT_REGEX = {
     "episode_only": [
         "\\[(\\d{1,3})\\]",
@@ -56,8 +57,10 @@ class ConfigDB:
         
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS whitelist (
-                file_path TEXT PRIMARY KEY
-            )
+                path TEXT PRIMARY KEY,
+                item_type TEXT NOT NULL DEFAULT 'file',
+                added_time TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
         ''')
         
         cursor.execute('''
@@ -81,7 +84,6 @@ class ConfigDB:
                         "INSERT OR IGNORE INTO regex_config (pattern_type, pattern) VALUES (?, ?)",
                         (pattern_type, pattern)
                     )
-        
         conn.commit()
 
     
@@ -106,22 +108,46 @@ class ConfigDB:
     
     def get_whitelist(self):
         conn, cursor = self._get_connection()
-        cursor.execute("SELECT file_path FROM whitelist")
-        return {row[0] for row in cursor.fetchall()}
+        cursor.execute("SELECT path, item_type, added_time FROM whitelist ORDER BY added_time DESC")
+        return [
+            {"path": row[0], "type": row[1], "timestamp": row[2]}
+            for row in cursor.fetchall()
+        ]
     
     def add_to_whitelist(self, file_path):
+        return self.add_whitelist_items([{"path": file_path}])["inserted"] == 1
+
+    def add_whitelist_items(self, items):
         conn, cursor = self._get_connection()
-        cursor.execute(
-            "INSERT OR IGNORE INTO whitelist (file_path) VALUES (?)",
-            (file_path,)
-        )
+        inserted = skipped = 0
+        failed = []
+
+        for item in items:
+            path = item.get("path")
+            item_type = item.get("type", "file")
+            ts = item.get("timestamp") or datetime.utcnow().isoformat()
+
+            if not path:
+                failed.append({"path": None, "error": "path 为空"})
+                continue
+            try:
+                cursor.execute(
+                    "INSERT OR IGNORE INTO whitelist (path, item_type, added_time) VALUES (?, ?, ?)",
+                    (path, item_type, ts)
+                )
+                if cursor.rowcount:
+                    inserted += 1
+                else:
+                    skipped += 1
+            except Exception as exc:
+                failed.append({"path": path, "error": str(exc)})
         conn.commit()
-        return cursor.rowcount > 0
+        return dict(inserted=inserted, skipped=skipped, failed=failed)
     
     def remove_from_whitelist(self, file_path):
         conn, cursor = self._get_connection()
         cursor.execute(
-            "DELETE FROM whitelist WHERE file_path = ?",
+            "DELETE FROM whitelist WHERE path = ?",
             (file_path,)
         )
         conn.commit()
