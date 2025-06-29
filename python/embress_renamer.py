@@ -11,7 +11,7 @@ import json
 import logging
 import datetime
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional, Set
+from typing import Dict, List, Tuple, Optional, Set, Union
 from database import config_db
 import time
 
@@ -27,13 +27,12 @@ STATUS_UNPROCESSED = "unprocessed"
 
 
 class WhitelistLoader:
-    """升级版：支持缓存 + 文件/目录级匹配"""
-    _cache: Dict[str, Set[str] | List[Path]] | None = None
+    _cache: Dict[str, Union[Set[str], List[Path]]] = None
     _cache_time: float = 0
     _ttl = 5
 
     @classmethod
-    def whitelist(cls) -> Dict[str, Set[str] | List[Path]]:
+    def whitelist(cls) -> Dict[str, Union[Set[str], List[Path]]]:
         now = time.time()
         FULL_MEDIA_PATH = Path(MEDIA_PATH).resolve()
         if cls._cache is None or now - cls._cache_time > cls._ttl:
