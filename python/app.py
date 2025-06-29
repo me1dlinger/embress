@@ -40,7 +40,7 @@ def scheduled_scan() -> None:
         error_result = {
             "status": "error",
             "message": str(exc),
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.datetime.now().isoformat(),
         }
         config_db.add_scan_history(error_result)
 
@@ -88,7 +88,7 @@ def manual_scan():
         error_result = {
             "status": "error",
             "message": str(exc),
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.datetime.now().isoformat(),
         }
         config_db.add_scan_history(error_result)
         return jsonify({"success": False, "result": error_result}), 500
@@ -109,7 +109,7 @@ def scan_directory():
        error_result = {
            "status": "error",
            "message": str(exc),
-           "timestamp": datetime.now().isoformat(),
+           "timestamp": datetime.datetime.now().isoformat(),
            "target": sub_path,
        }
        config_db.add_scan_history(error_result)
@@ -152,7 +152,7 @@ def rollback_season():
                 "new": original_name,
                 "status": "failed",
                 "error": "文件不存在",
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.datetime.now().isoformat(),
                 "path": rec["path"]
             })
             continue
@@ -166,7 +166,7 @@ def rollback_season():
                     "original": rec["new"],
                     "new": original_name,
                     "status": "rolled_back",
-                    "timestamp": datetime.now().isoformat(),
+                    "timestamp": datetime.datetime.now().isoformat(),
                     "path": str((cur_path.parent / original_name).absolute())
                 }
                 rollback_results.append(rollback_result)
@@ -178,7 +178,7 @@ def rollback_season():
                     "new": original_name,
                     "status": "failed",
                     "error": "重命名失败",
-                    "timestamp": datetime.now().isoformat(),
+                    "timestamp": datetime.datetime.now().isoformat(),
                     "path": rec["path"]
                 })
         except Exception as exc:
@@ -189,7 +189,7 @@ def rollback_season():
                 "new": original_name,
                 "status": "failed",
                 "error": str(exc),
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.datetime.now().isoformat(),
                 "path": rec["path"]
             })
     try:

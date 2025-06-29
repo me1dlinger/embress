@@ -154,5 +154,3 @@ services:
 ![4](screenshots/4.png)
 
 ![5](screenshots/5.png)
-
-
