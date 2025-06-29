@@ -12,7 +12,7 @@ from pathlib import Path
 import datetime
 from flask import Flask, render_template, request, jsonify
 from apscheduler.schedulers.background import BackgroundScheduler
-from embress_renamer import EmbressRenamer
+from embress_renamer import EmbressRenamer,WhitelistLoader
 from database import config_db
 
 app = Flask(__name__)
@@ -265,13 +265,13 @@ def add_to_whitelist():
         except Exception as exc:
             app.logger.exception("批量写入白名单失败")
             return jsonify({"success": False, "message": str(exc)}), 500
-
     # 兼容单条
     file_path = data.get("file_path")
     if not file_path:
         return jsonify({"success": False, "message": "缺少 file_path 或 items"}), 400
     try:
         inserted = config_db.add_to_whitelist(file_path)
+        WhitelistLoader.force_reload()
         return jsonify({"success": True, "inserted": inserted,
                         "message": "加入白名单成功" if inserted else "已在白名单中"})
     except Exception as exc:
@@ -297,6 +297,7 @@ def delete_from_whitelist():
     try:
         removed = config_db.remove_from_whitelist(file_path)
         message = "移出白名单成功" if removed else "不在白名单中"
+        WhitelistLoader.force_reload()
         return jsonify({"success": True, "removed": removed, "message": message})
     except Exception as exc:
         app.logger.exception("写入白名单失败")

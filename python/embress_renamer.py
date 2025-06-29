@@ -13,6 +13,7 @@ import datetime
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Set
 from database import config_db
+import time
 
 LOGS_PATH = os.getenv("LOG_PATH", "./data/logs")
 MEDIA_PATH = os.getenv("MEDIA_PATH", "./data/media")
@@ -26,12 +27,51 @@ STATUS_UNPROCESSED = "unprocessed"
 
 
 class WhitelistLoader:
-    _cache_mtime: float = 0.0
-    _whitelist: Set[str] = set()
-    @classmethod
-    def whitelist(cls) -> Set[str]:
-        return config_db.get_whitelist()
+    """升级版：支持缓存 + 文件/目录级匹配"""
+    _cache: Dict[str, Set[str] | List[Path]] | None = None
+    _cache_time: float = 0
+    _ttl = 5
 
+    @classmethod
+    def whitelist(cls) -> Dict[str, Set[str] | List[Path]]:
+        now = time.time()
+        FULL_MEDIA_PATH = Path(MEDIA_PATH).resolve()
+        if cls._cache is None or now - cls._cache_time > cls._ttl:
+            entries = config_db.get_whitelist()
+            file_set: Set[str] = set()
+            dir_list: List[Path] = []
+            for entry in entries:
+                raw = entry["path"].strip().lstrip("/\\") 
+                path = (FULL_MEDIA_PATH/ raw).resolve()
+                if entry.get("type") == "directory":
+                    dir_list.append(path)
+                else:
+                    file_set.add(str(path))
+            cls._cache = {
+                "files": file_set,
+                "dirs": dir_list
+            }
+            cls._cache_time = now
+        return cls._cache
+
+    @classmethod
+    def is_whitelisted(cls, abs_path: str) -> bool:
+        wl = cls.whitelist()
+        if abs_path in wl["files"]:
+            return True
+        path = Path(abs_path)
+        for d in wl["dirs"]:
+            try:
+                if path.is_relative_to(d):
+                    return True
+            except ValueError:
+                continue
+        return False
+    @classmethod
+    def force_reload(cls):
+        """手动刷新缓存"""
+        cls._cache = None
+        cls._cache_time = 0
 
 class RegexLoader:
     _cache_mtime: float = 0.0
@@ -286,7 +326,6 @@ class EmbressRenamer:
 
 
     def _season_processed_set(self, season_dir: Path) -> Set[Tuple[str, str]]:
-        """从 rename_record.json 中读取已处理 (path, original) 集合，兼容旧格式"""
         rec_file = season_dir / "rename_record.json"
         if not rec_file.exists():
             return set()
@@ -369,7 +408,13 @@ class EmbressRenamer:
             for file in root_path.iterdir():
                 if not (file.is_file() and file.suffix.lower() in video_exts):
                     continue
-                if (str(file.absolute()), file.name) in processed_files:
+                abs_path = str(file.resolve())
+                if WhitelistLoader.is_whitelisted(abs_path):
+                    processed_files_list.append(
+                        {"path": abs_path, "status": STATUS_WHITELIST}
+                    )
+                    continue
+                if (abs_path, file.name) in processed_files:
                     continue
 
                 file_info = {
@@ -436,12 +481,9 @@ class EmbressRenamer:
                                 continue
 
                             abs_path = str(f.absolute())
-                            if abs_path in whitelist:
+                            if WhitelistLoader.is_whitelisted(abs_path):
                                 processed_files_list.append(
-                                    {
-                                        "path": abs_path,
-                                        "status": STATUS_WHITELIST,
-                                    }
+                                    {"path": abs_path, "status": STATUS_WHITELIST}
                                 )
                                 continue
 

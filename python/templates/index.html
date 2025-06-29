@@ -126,12 +126,10 @@
                         <div class="row mt-2">
                           <div class="col-6"><strong>白名单数量:</strong></div>
                           <div class="col-6">
-                            <span v-if="systemStatus.total_whitelist>0" class="badge bg-info" @click="showWhitelist">
+                            <span class="badge bg-info" @click="showWhitelist">
                               [[ systemStatus.total_whitelist ]]
                             </span>
-                            <span v-else>
-                              0
-                            </span>
+
                           </div>
 
 
