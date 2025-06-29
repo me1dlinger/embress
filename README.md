@@ -51,10 +51,9 @@ embress
 ├── python
 │   │ 
 │   ├── app.py                      ➔ API服务
-│   ├── embress_rename.py           ➔ 重命名业务
+│   ├── embress_rename.py           ➔ 重命名执行
+│   ├── database.py                 ➔ 数据库存储
 │   ├── requirements.txt            ➔ python依赖
-│   ├── conf
-│   │   └── regex_patterns.json     ➔ 正则配置
 │   ├── templates
 │   │   └── index.html              ➔ 前端面板
 │   └── static                      ➔ 静态文件目录

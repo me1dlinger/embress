@@ -47,9 +47,8 @@ embress
 │   │ 
 │   ├── app.py                      ➔ API server
 │   ├── embress_rename.py           ➔ rename logic
+│   ├── database.py                 ➔ database
 │   ├── requirements.txt            ➔ Python dependencies
-│   ├── conf
-│   │   └── regex_patterns.json     ➔ Regex config file
 │   ├── templates
 │   │   └── index.html              ➔ Dashboard UI
 │   └── static                      ➔ Static resources
