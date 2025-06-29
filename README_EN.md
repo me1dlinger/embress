@@ -85,13 +85,14 @@ docker run -d \
   -v ${media_path1}:/app/media/path1 \
   -v ${media_path2}:/app/media/path2 \
   -v ${logs_path}:/app/python/logs \
+  -v ${conf_path}:/app/conf \
   -e TZ=Asia/Shanghai \
   -e ACCESS_KEY=${ACCESS_KEY} \
   -e MEDIA_PATH=/app/media \
-  -e REGEX_PATH=/app/python/conf/regex_patterns.json \
-  -e WHITELIST_PATH=/app/python/conf/whitelist.json \
+  -e CONFIG_DB_PATH=/app/conf/config.db
+  -e LOG_PATH=/app/python/logs
   -e SCAN_INTERVAL=3600 \
-  embress:latest
+  meidlinger1024/embress:latest
 ```
 
 ${media_path1}: Media library directory 1
@@ -106,30 +107,31 @@ SCAN_INTERVAL: Scan interval in seconds
 
 MEDIA_PATH: Container media library root directory (default: /app/media)
 
-REGEX_PATH: Program regex configuration path (default: /app/python/conf/regex_patterns.json)
+CONFIG_DB_PATH:database directory, (default: /app/conf/config.db)
 
-WHITELIST_PATH: Program filename whitelist configuration path (default: /app/python/conf/whitelist.json)
+LOG_PATH:app-log directory, (default: /app/python/logs)
 
 ### Run with Docker Compose
 ```
-version: '3'
+version: "3"
 services:
-  embress:
-    image: embress:latest
+  embresse:
+    image: embress
     container_name: embress
     restart: always
     ports:
       - "15000:15000"
     volumes:
-      - ${media_path1}:/app/media/path1
-      - ${media_path2}:/app/media/path2
-      - ${logs_path}:/app/python/logs
+      - _media_path1:/app/media/path1
+      - _media_path2:/app/media/path2
+      - _logs_path:/app/python/logs
+      - _conf_path:/app/conf
     environment:
       - TZ=Asia/Shanghai
-      - ACCESS_KEY=${ACCESS_KEY}
+      - ACCESS_KEY=ACCESS_KEY
       - MEDIA_PATH=/app/media
-      - REGEX_PATH=/app/python/conf/regex_patterns.json
-      - WHITELIST_PATH=/app/python/conf/whitelist.json
+      - CONFIG_DB_PATH=/app/conf/config.db
+      - LOG_PATH=/app/python/logs
       - SCAN_INTERVAL=3600
 ```
 
