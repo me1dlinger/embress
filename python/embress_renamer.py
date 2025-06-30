@@ -630,7 +630,6 @@ class EmbressRenamer:
             }
 
         if self._is_season_dir(root_path):
-            print("识别是季度")
             media_type = self._extract_media_type(root_path)
             self.logger.info(
                 f"Processing season directory: {root_path} (Media type: {media_type})"
@@ -647,7 +646,6 @@ class EmbressRenamer:
             renamed_subtitle += s_inc
             deleted_nfo += n_inc
         elif self._is_show_dir(root_path):
-            print("识别是节目")
             self.logger.info(f"Processing show directory: {root_path}")
             for season_dir in root_path.iterdir():
                 media_type = self._extract_media_type(root_path)
