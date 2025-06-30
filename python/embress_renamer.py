@@ -14,9 +14,13 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Set, Union
 from database import config_db
 import time
+from logging.handlers import RotatingFileHandler
 
-LOGS_PATH = os.getenv("LOG_PATH", "./data/logs")
+
+LOGS_PATH = Path(os.getenv("LOG_PATH", "./data/logs"))
 MEDIA_PATH = os.getenv("MEDIA_PATH", "./data/media")
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+
 
 STATUS_RENAMED = "renamed"
 STATUS_FAILED = "failed"
@@ -24,6 +28,12 @@ STATUS_SKIP = "skip"
 STATUS_UNMATCHED = "unmatched"
 STATUS_WHITELIST = "whitelisted"
 STATUS_UNPROCESSED = "unprocessed"
+
+SEASON_PATTERNS = [
+    re.compile(r"season[ _\-]?(\d{1,2})", re.I),
+    re.compile(r"s(\d{1,2})$", re.I),
+    re.compile(r"第(\d{1,2})季"),
+]
 
 
 class WhitelistLoader:
@@ -41,15 +51,12 @@ class WhitelistLoader:
             dir_list: List[Path] = []
             for entry in entries:
                 if entry.get("type") == "directory":
-                    raw = entry["path"].strip().lstrip("/\\") 
-                    path = (FULL_MEDIA_PATH/ raw).resolve()
+                    raw = entry["path"].strip().lstrip("/\\")
+                    path = (FULL_MEDIA_PATH / raw).resolve()
                     dir_list.append(path)
                 else:
                     file_set.add(str(entry["path"]))
-            cls._cache = {
-                "files": file_set,
-                "dirs": dir_list
-            }
+            cls._cache = {"files": file_set, "dirs": dir_list}
             cls._cache_time = now
         return cls._cache
 
@@ -66,15 +73,18 @@ class WhitelistLoader:
             except ValueError:
                 continue
         return False
+
     @classmethod
     def force_reload(cls):
         """手动刷新缓存"""
         cls._cache = None
         cls._cache_time = 0
 
+
 class RegexLoader:
     _cache_mtime: float = 0.0
     _patterns: Dict[str, List[str]] = {}
+
     @classmethod
     def patterns(cls) -> Dict[str, List[str]]:
         return config_db.get_regex_patterns()
@@ -86,20 +96,31 @@ class EmbressRenamer:
         self.logger = self._setup_logger()
 
     def _setup_logger(self) -> logging.Logger:
-        logger = logging.getLogger(f"EmbressRenamer_{datetime.datetime.now():%Y%m%d}")
-        logger.setLevel(logging.INFO)
+        logger = logging.getLogger("EmbressRenamer")
 
-        log_dir = Path(LOGS_PATH)
-        log_dir.mkdir(exist_ok=True)
+        if not logger.handlers:  # 只初始化一次
+            logger.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
+            logger.propagate = False  # 阻止向 root 传播导致重复
 
-        log_file = log_dir / f"emby_renamer_{datetime.datetime.now():%Y%m%d}.log"
-        fh = logging.FileHandler(log_file, encoding="utf-8")
-        fh.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+            # 文件 handler
+            LOGS_PATH.mkdir(parents=True, exist_ok=True)
+            log_file = LOGS_PATH / f"emby_renamer_{datetime.datetime.now():%Y%m%d}.log"
+            file_handler = RotatingFileHandler(
+                log_file, maxBytes=10 * 1024 * 1024, backupCount=7, encoding="utf-8"
+            )
+            formatter = logging.Formatter(
+                "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
+            )
+            file_handler.setFormatter(formatter)
+            logger.addHandler(file_handler)
 
-        logger.addHandler(fh)
-        logger.addHandler(logging.StreamHandler())
+            # 控制台 handler
+            console_handler = logging.StreamHandler()
+            console_handler.setFormatter(formatter)
+            logger.addHandler(console_handler)
 
         return logger
+
     def _extract_episode_info(
         self, filename: str
     ) -> Optional[Tuple[Optional[int], int]]:
@@ -126,8 +147,8 @@ class EmbressRenamer:
         return None
 
     def _generate_new_filename(
-    self, original: str, season: Optional[int], episode: int
-) -> str:
+        self, original: str, season: Optional[int], episode: int
+    ) -> str:
         season_fmt = season if season is not None else 1
         new_seg = f"S{season_fmt:02d}E{episode:02d}"
         new = original
@@ -192,9 +213,10 @@ class EmbressRenamer:
 
     def _normalize_filename(self, name: str) -> str:
         """清理多余空格、点号前空格等问题"""
-        name = re.sub(r"\s{2,}", " ", name)     # 连续空格
-        name = re.sub(r"\s+\.", ".", name)      # 点号前空格
+        name = re.sub(r"\s{2,}", " ", name)  # 连续空格
+        name = re.sub(r"\s+\.", ".", name)  # 点号前空格
         return name.strip()
+
     def _rename_file_and_subtitles(self, file_path: Path, new_name: str) -> List[Dict]:
         """重命名主文件，并同步处理字幕和 nfo"""
         changes: List[Dict] = []
@@ -282,7 +304,10 @@ class EmbressRenamer:
                     )
 
         return changes
-    def _save_change_record(self, season_dir: Path, media_type: str, changes: List[Dict]):
+
+    def _save_change_record(
+        self, season_dir: Path, media_type: str, changes: List[Dict]
+    ):
         """合并写入 rename_record.json，兼容旧记录无 path 的情况"""
         record_file = season_dir / "rename_record.json"
         existing: List[Dict] = []
@@ -296,33 +321,42 @@ class EmbressRenamer:
         existing_updated = False
         for item in existing:
             if "path" not in item:
-                item["path"] = str((season_dir / item.get("new", item.get("original", ""))).absolute())
+                item["path"] = str(
+                    (season_dir / item.get("new", item.get("original", ""))).absolute()
+                )
                 existing_updated = True
 
         if existing_updated:
             try:
-                record_file.write_text(json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8")
+                record_file.write_text(
+                    json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8"
+                )
             except Exception:
                 pass
         for c in changes:
             c["timestamp"] = datetime.datetime.now().isoformat()
             c["media_type"] = media_type
-            c["path"] = str((season_dir / c.get("new", c.get("original", ""))).absolute())
+            c["path"] = str(
+                (season_dir / c.get("new", c.get("original", ""))).absolute()
+            )
 
         merged: Dict[Tuple[str, str], Dict] = {
             (item["path"], item.get("original", "")): item for item in existing
         }
         for c in changes:
             key = (c["path"], c.get("original", ""))
-            if key in merged and c["status"] == "skip" and merged[key]["status"] != "skip":
+            if (
+                key in merged
+                and c["status"] == "skip"
+                and merged[key]["status"] != "skip"
+            ):
                 continue
             merged[key] = c
 
         record_file.write_text(
-            json.dumps(list(merged.values()), ensure_ascii=False, indent=2), encoding="utf-8"
+            json.dumps(list(merged.values()), ensure_ascii=False, indent=2),
+            encoding="utf-8",
         )
-
-
 
     def _season_processed_set(self, season_dir: Path) -> Set[Tuple[str, str]]:
         rec_file = season_dir / "rename_record.json"
@@ -339,13 +373,17 @@ class EmbressRenamer:
 
         for item in data:
             if "path" not in item:
-                derived = str((season_dir / item.get("new", item.get("original", ""))).absolute())
+                derived = str(
+                    (season_dir / item.get("new", item.get("original", ""))).absolute()
+                )
                 item["path"] = derived
                 updated = True
-            processed.add((item["path"], item.get("original", "")))
+            processed.add((item["path"], item.get("new", "")))
         if updated:
             try:
-                rec_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+                rec_file.write_text(
+                    json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+                )
             except Exception:
                 pass
 
@@ -369,11 +407,22 @@ class EmbressRenamer:
                 "status": STATUS_SKIP,
             }
         ]
+
     def scan_and_rename(self, sub_path: Optional[str] = None) -> Dict:
-        whitelist = WhitelistLoader.whitelist()
         processed_files_list: List[Dict] = []
         total, renamed = 0, 0
-
+        video_exts = {
+            ".mkv",
+            ".mp4",
+            ".avi",
+            ".mov",
+            ".wmv",
+            ".flv",
+            ".webm",
+            ".ts",
+            ".m2ts",
+        }
+        finished_statuses = {STATUS_RENAMED, STATUS_WHITELIST, STATUS_SKIP}
         root_path = (
             self.media_path if sub_path is None else (self.media_path / sub_path)
         )
@@ -386,159 +435,49 @@ class EmbressRenamer:
                 "processed": 0,
                 "renamed": 0,
                 "target": str(sub_path or "ALL"),
-                "timestamp": datetime.datetime.now().isoformat()
+                "timestamp": datetime.datetime.now().isoformat(),
             }
-
-        video_exts = {
-            ".mkv",
-            ".mp4",
-            ".avi",
-            ".mov",
-            ".wmv",
-            ".flv",
-            ".webm",
-            ".ts",
-            ".m2ts",
-        }
-        if sub_path and "season" in root_path.name.lower():
-            processed_files = self._season_processed_set(root_path)
-            season_num_hint = self._get_season_from_path(root_path)
-
-            for file in root_path.iterdir():
-                if not (file.is_file() and file.suffix.lower() in video_exts):
-                    continue
-                abs_path = str(file.resolve())
-                if WhitelistLoader.is_whitelisted(abs_path):
-                    processed_files_list.append(
-                        {"path": abs_path, "status": STATUS_WHITELIST}
+        if self._is_season_dir(root_path):
+            media_type = self._extract_media_type(root_path)
+            p_list, t_inc, r_inc = self._scan_single_season(
+                season_dir=root_path,
+                parent_show=root_path.parent,
+                video_exts=video_exts,
+                media_type_name=media_type,
+            )
+            processed_files_list.extend(p_list)
+            total += t_inc
+            renamed += r_inc
+        elif self._is_show_dir(root_path):
+            for season_dir in root_path.iterdir():
+                media_type = self._extract_media_type(root_path)
+                if season_dir.is_dir() and self._is_season_dir(season_dir):
+                    p_list, t_inc, r_inc = self._scan_single_season(
+                        season_dir=season_dir,
+                        parent_show=root_path,
+                        video_exts=video_exts,
+                        media_type_name=media_type,
                     )
-                    continue
-                if (abs_path, file.name) in processed_files:
-                    continue
-
-                file_info = {
-                    "path": str(file.absolute()),
-                    "status": STATUS_UNPROCESSED,
-                }
-                total += 1
-
-                season_info = self._extract_episode_info(file.name)
-                if season_info is None:
-                    file_info["status"] = STATUS_UNMATCHED
-                    file_info["reason"] = "no_episode_and_season_info"
-                    processed_files_list.append(file_info)
-                    continue
-
-                file_season, ep = season_info
-                effective_season = file_season or season_num_hint
-                new_name = self._generate_new_filename(file.name, effective_season, ep)
-
-                if new_name != file.name:
-                    changes = self._rename_file_and_subtitles(file, new_name)
-                    if self._count_success_renames(changes):
-                        file_info.update(
-                            {
-                                "status": STATUS_RENAMED,
-                                "original_name": file.name,
-                                "new_name": new_name,
-                            }
-                        )
-                        renamed += 1
-                    else:
-                        file_info["status"] = STATUS_FAILED
-                        file_info["errors"] = [
-                            c.get("error") for c in changes if c.get("error")
-                        ]
-                else:
-                    file_info["status"] = STATUS_SKIP
-                    file_info["reason"] = "no_rename_needed"
-
-                processed_files_list.append(file_info)
+                    processed_files_list.extend(p_list)
+                    total += t_inc
+                    renamed += r_inc
         else:
-            for media_type_dir in self.media_path.iterdir():
-                if not media_type_dir.is_dir():
-                    continue
-
-                for show_dir in media_type_dir.iterdir():
-                    if not show_dir.is_dir():
-                        continue
-
-                    for season_dir in show_dir.iterdir():
-                        if not season_dir.is_dir():
-                            continue
-
-                        processed_files = self._season_processed_set(season_dir)
-                        season_num_hint = self._get_season_from_path(season_dir)
-                        season_changes: List[Dict] = []
-
-                        for f in season_dir.iterdir():
-                            if (
-                                not f.is_file()
-                                or f.suffix.lower() not in video_exts
-                                or (str(f.absolute()), f.name) in processed_files
-                            ):
-                                continue
-
-                            abs_path = str(f.absolute())
-                            if WhitelistLoader.is_whitelisted(abs_path):
-                                processed_files_list.append(
-                                    {"path": abs_path, "status": STATUS_WHITELIST}
-                                )
-                                continue
-
-                            file_info = {
-                                "path": abs_path,
-                                "status": STATUS_UNPROCESSED,
-                            }
-                            total += 1
-
-                            info = self._extract_episode_info(f.name)
-                            if info is None:
-                                file_info["status"] = STATUS_UNMATCHED
-                                file_info["reason"] = "no_episode_and_season_info"
-                                processed_files_list.append(file_info)
-                                continue
-
-                            season, ep = info
-                            season = season or season_num_hint
-                            new_name = self._generate_new_filename(f.name, season, ep)
-                            if new_name != f.name:
-                                changes = self._rename_file_and_subtitles(f, new_name)
-                                if self._count_success_renames(changes):
-                                    file_info.update(
-                                        {
-                                            "status": STATUS_RENAMED,
-                                            "original_name": f.name,
-                                            "new_name": new_name,
-                                        }
-                                    )
-                                    renamed += 1
-                                else:
-                                    file_info["status"] = STATUS_FAILED
-                                    file_info["errors"] = [
-                                        c.get("error")
-                                        for c in changes
-                                        if c.get("error")
-                                    ]
-                            else:
-                                file_info["status"] = STATUS_SKIP
-                                file_info["reason"] = "no_rename_needed"
-                                changes = self._build_skip_record(f.name)
-
-                            season_changes.extend(changes)
-                            processed_files_list.append(file_info)
-                        if season_changes:
-                            self._save_change_record(
-                                season_dir, media_type_dir.name, season_changes
-                            )
-        
-        finished_statuses = {STATUS_RENAMED, STATUS_WHITELIST, STATUS_SKIP}
+            for show_dir, season_dir in self._iter_season_dirs(root_path):
+                media_type = self._extract_media_type(season_dir)
+                p_list, t_inc, r_inc = self._scan_single_season(
+                    season_dir=season_dir,
+                    parent_show=show_dir,
+                    video_exts=video_exts,
+                    media_type_name=media_type,
+                )
+                processed_files_list.extend(p_list)
+                total += t_inc
+                renamed += r_inc
         unrenamed_files = [
             {"path": f["path"]}
             for f in processed_files_list
             if f.get("status") not in finished_statuses
         ]
-
         return {
             "status": "completed",
             "processed": total,
@@ -548,6 +487,115 @@ class EmbressRenamer:
             "timestamp": datetime.datetime.now().isoformat(),
             "target": str(sub_path or "ALL"),
         }
+
+    def _extract_media_type(self, any_path: Path) -> str:
+        try:
+            return any_path.relative_to(self.media_path).parts[0]
+        except ValueError:
+            return any_path.parent.name
+
+    def _iter_season_dirs(self, base_dir: Path):
+        for entry in base_dir.iterdir():
+            if not entry.is_dir():
+                continue
+            if self._is_season_dir(entry):
+                yield entry.parent, entry
+            else:
+                yield from self._iter_season_dirs(entry)
+
+    def _is_season_dir(self, path: Path) -> bool:
+        if not path.is_dir():
+            return False
+        return any(pat.search(path.name) for pat in SEASON_PATTERNS)
+
+    def _is_show_dir(self, path: Path) -> bool:
+        if not path.is_dir():
+            return False
+        return any(self._is_season_dir(d) for d in path.iterdir() if d.is_dir())
+
+    def _scan_single_season(
+        self,
+        season_dir: Path,
+        parent_show: Path,
+        video_exts: Set[str],
+        media_type_name: str,
+    ) -> Tuple[List[Dict], int, int]:
+        processed_files_list: List[Dict] = []
+        total, renamed = 0, 0
+
+        processed_files = self._season_processed_set(season_dir)
+        season_num_hint = self._get_season_from_path(season_dir)
+        season_changes: List[Dict] = []
+
+        for f in season_dir.iterdir():
+            abs_path = str(f.absolute())
+            if (
+                not f.is_file()
+                or f.suffix.lower() not in video_exts
+                or (abs_path, f.name) in processed_files
+            ):
+                continue
+
+            file_info, changes, renamed_flag = self._process_episode_file(
+                f, season_num_hint, abs_path
+            )
+            processed_files_list.append(file_info)
+            season_changes.extend(changes)
+            total += 1
+            if renamed_flag:
+                renamed += 1
+        if season_changes:
+            self._save_change_record(season_dir, media_type_name, season_changes)
+        return processed_files_list, total, renamed
+
+    def _process_episode_file(
+        self,
+        file_path: Path,
+        season_num_hint: Optional[int],
+        abs_path: str,
+    ) -> Tuple[Dict, List[Dict], bool]:
+        if WhitelistLoader.is_whitelisted(abs_path):
+            return (
+                {"path": abs_path, "status": STATUS_WHITELIST},
+                [],
+                False,
+            )
+        file_info = {
+            "path": abs_path,
+            "status": STATUS_UNPROCESSED,
+        }
+        episode_info = self._extract_episode_info(file_path.name)
+        if episode_info is None:
+            file_info.update(
+                {"status": STATUS_UNMATCHED, "reason": "no_episode_and_season_info"}
+            )
+            return file_info, [], False
+
+        season_num, ep_num = episode_info
+        effective_season = season_num or season_num_hint
+        new_name = self._generate_new_filename(file_path.name, effective_season, ep_num)
+        if new_name == file_path.name:
+            file_info.update({"status": STATUS_SKIP, "reason": "no_rename_needed"})
+            changes = self._build_skip_record(file_path.name)
+            return file_info, changes, False
+        changes = self._rename_file_and_subtitles(file_path, new_name)
+        if self._count_success_renames(changes):
+            file_info.update(
+                {
+                    "status": STATUS_RENAMED,
+                    "original_name": file_path.name,
+                    "new_name": new_name,
+                }
+            )
+            return file_info, changes, True
+        else:
+            file_info.update(
+                {
+                    "status": STATUS_FAILED,
+                    "errors": [c.get("error") for c in changes if c.get("error")],
+                }
+            )
+            return file_info, changes, False
 
 
 if __name__ == "__main__":

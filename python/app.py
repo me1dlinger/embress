@@ -9,25 +9,28 @@ import os
 import json
 import logging
 from pathlib import Path
+from logging.handlers import RotatingFileHandler
 import datetime
 from flask import Flask, render_template, request, jsonify
 from apscheduler.schedulers.background import BackgroundScheduler
-from embress_renamer import EmbressRenamer,WhitelistLoader
+from embress_renamer import EmbressRenamer, WhitelistLoader
 from database import config_db
 
-app = Flask(__name__)
 
-LOGS_PATH = os.getenv("LOG_PATH", "./data/logs")
+LOGS_PATH = Path(os.getenv("LOG_PATH", "./data/logs"))
 MEDIA_PATH = os.getenv("MEDIA_PATH", "./data/media")
 ACCESS_KEY = os.getenv("ACCESS_KEY", "12345")
-SCAN_INTERVAL = int(os.getenv("SCAN_INTERVAL", 3600))
+SCAN_INTERVAL = int(os.getenv("SCAN_INTERVAL", 600))
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+
 
 MAX_RETRIES = 3
 RETRY_DELAY = 0.5
 
-
+app = Flask(__name__)
 renamer = EmbressRenamer(MEDIA_PATH)
 scheduler = BackgroundScheduler()
+
 
 def scheduled_scan() -> None:
     try:
@@ -57,6 +60,7 @@ def authenticate():
         return jsonify({"success": True, "message": "验证成功"})
     return jsonify({"success": False, "message": "访问密钥错误"})
 
+
 @app.route("/api/status")
 def get_status():
     return jsonify(
@@ -76,12 +80,14 @@ def get_history():
     history = config_db.get_scan_history()
     return jsonify({"history": history, "total": len(history)})
 
+
 @app.route("/api/manual-scan", methods=["POST"])
 def manual_scan():
     try:
         app.logger.info("开始手动扫描 … …")
         result = renamer.scan_and_rename()
         config_db.add_scan_history(result)
+        app.logger.info(f"手动扫描完成: {result}")
         return jsonify({"success": True, "result": result})
     except Exception as exc:
         app.logger.exception("手动扫描失败")
@@ -93,27 +99,29 @@ def manual_scan():
         config_db.add_scan_history(error_result)
         return jsonify({"success": False, "result": error_result}), 500
 
+
 @app.route("/api/scan-directory", methods=["POST"])
 def scan_directory():
-   data = request.get_json(silent=True) or {}
-   sub_path = data.get("sub_path")
-   if not sub_path:
-       return jsonify({"success": False, "message": "缺少 sub_path"}), 400
-   try:
-       app.logger.info(f"开始扫描子目录: {sub_path}")
-       result = renamer.scan_and_rename(sub_path=sub_path)
-       config_db.add_scan_history(result)
-       return jsonify({"success": True, "result": result})
-   except Exception as exc:
-       app.logger.exception("扫描子目录失败")
-       error_result = {
-           "status": "error",
-           "message": str(exc),
-           "timestamp": datetime.datetime.now().isoformat(),
-           "target": sub_path,
-       }
-       config_db.add_scan_history(error_result)
-       return jsonify({"success": False, "result": error_result}), 500
+    data = request.get_json(silent=True) or {}
+    sub_path = data.get("sub_path")
+    if not sub_path:
+        return jsonify({"success": False, "message": "缺少 sub_path"}), 400
+    try:
+        app.logger.info(f"开始扫描子目录: {sub_path}")
+        result = renamer.scan_and_rename(sub_path=sub_path)
+        config_db.add_scan_history(result)
+        return jsonify({"success": True, "result": result})
+    except Exception as exc:
+        app.logger.exception("扫描子目录失败")
+        error_result = {
+            "status": "error",
+            "message": str(exc),
+            "timestamp": datetime.datetime.now().isoformat(),
+            "target": sub_path,
+        }
+        config_db.add_scan_history(error_result)
+        return jsonify({"success": False, "result": error_result}), 500
+
 
 @app.route("/api/rollback-season", methods=["POST"])
 def rollback_season():
@@ -141,20 +149,26 @@ def rollback_season():
     rolled_back_cnt = 0
 
     for rec in original_records:
-        if rec.get("type")!="rename" or rec.get("status") != "success" or rec.get("rollback") is True:
+        if (
+            rec.get("type") != "rename"
+            or rec.get("status") != "success"
+            or rec.get("rollback") is True
+        ):
             continue
         cur_path = Path(rec["path"])
         original_name = rec["original"]
         if not cur_path.exists():
-            rollback_results.append({
-                "type": "rollback",
-                "original": rec["new"],
-                "new": original_name,
-                "status": "failed",
-                "error": "文件不存在",
-                "timestamp": datetime.datetime.now().isoformat(),
-                "path": rec["path"]
-            })
+            rollback_results.append(
+                {
+                    "type": "rollback",
+                    "original": rec["new"],
+                    "new": original_name,
+                    "status": "failed",
+                    "error": "文件不存在",
+                    "timestamp": datetime.datetime.now().isoformat(),
+                    "path": rec["path"],
+                }
+            )
             continue
 
         try:
@@ -167,31 +181,35 @@ def rollback_season():
                     "new": original_name,
                     "status": "rolled_back",
                     "timestamp": datetime.datetime.now().isoformat(),
-                    "path": str((cur_path.parent / original_name).absolute())
+                    "path": str((cur_path.parent / original_name).absolute()),
                 }
                 rollback_results.append(rollback_result)
                 rec["rollback"] = True
             else:
-                rollback_results.append({
+                rollback_results.append(
+                    {
+                        "type": "rollback",
+                        "original": rec["new"],
+                        "new": original_name,
+                        "status": "failed",
+                        "error": "重命名失败",
+                        "timestamp": datetime.datetime.now().isoformat(),
+                        "path": rec["path"],
+                    }
+                )
+        except Exception as exc:
+            app.logger.exception("回滚出错")
+            rollback_results.append(
+                {
                     "type": "rollback",
                     "original": rec["new"],
                     "new": original_name,
                     "status": "failed",
-                    "error": "重命名失败",
+                    "error": str(exc),
                     "timestamp": datetime.datetime.now().isoformat(),
-                    "path": rec["path"]
-                })
-        except Exception as exc:
-            app.logger.exception("回滚出错")
-            rollback_results.append({
-                "type": "rollback",
-                "original": rec["new"],
-                "new": original_name,
-                "status": "failed",
-                "error": str(exc),
-                "timestamp": datetime.datetime.now().isoformat(),
-                "path": rec["path"]
-            })
+                    "path": rec["path"],
+                }
+            )
     try:
         rename_record_path.write_text(
             json.dumps(original_records, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -213,12 +231,9 @@ def rollback_season():
         except Exception as exc:
             app.logger.exception("写入 rollback.json 失败")
 
-    return jsonify({
-        "success": True,
-        "rolled_back": rolled_back_cnt,
-        "results": rollback_results
-    })
-
+    return jsonify(
+        {"success": True, "rolled_back": rolled_back_cnt, "results": rollback_results}
+    )
 
 
 @app.route("/api/regex-patterns", methods=["GET"])
@@ -272,11 +287,17 @@ def add_to_whitelist():
     try:
         inserted = config_db.add_to_whitelist(file_path)
         WhitelistLoader.force_reload()
-        return jsonify({"success": True, "inserted": inserted,
-                        "message": "加入白名单成功" if inserted else "已在白名单中"})
+        return jsonify(
+            {
+                "success": True,
+                "inserted": inserted,
+                "message": "加入白名单成功" if inserted else "已在白名单中",
+            }
+        )
     except Exception as exc:
         app.logger.exception("写入白名单失败")
         return jsonify({"success": False, "message": str(exc)}), 500
+
 
 @app.route("/api/whitelist", methods=["GET"])
 def get_whitelist():
@@ -303,6 +324,7 @@ def delete_from_whitelist():
         app.logger.exception("写入白名单失败")
         return jsonify({"success": False, "message": str(exc)}), 500
 
+
 @app.route("/api/change-records")
 def get_change_records():
     records = []
@@ -328,12 +350,15 @@ def get_change_records():
                 try:
                     season_records = json.loads(record_file.read_text(encoding="utf-8"))
                     for rec in season_records:
-                        if rec.get("status") == "success" and rec.get("type") != "nfo_delete":
+                        if (
+                            rec.get("status") == "success"
+                            and rec.get("type") != "nfo_delete"
+                        ):
                             rec.update(
                                 media_type=media_type_dir.name,
                                 show=show_dir.name,
                                 season=season_dir.name,
-                                rollback=rec.get("rollback",False)
+                                rollback=rec.get("rollback", False),
                             )
                             records.append(rec)
 
@@ -380,18 +405,27 @@ def get_log_content(filename: str):
         return jsonify({"error": f"读取日志失败: {exc}"}), 500
 
 
-
 def setup_logging() -> None:
     if app.debug:
         return
-    log_dir = Path(LOGS_PATH)
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / f"app_{datetime.datetime.now():%Y%m%d}.log"
-    file_handler = logging.FileHandler(log_file, encoding="utf-8")
-    file_handler.setLevel(logging.INFO)
-    file_handler.setFormatter(
-        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+
+    LOGS_PATH.mkdir(parents=True, exist_ok=True)
+    log_file = LOGS_PATH / f"app_{datetime.datetime.now():%Y%m%d}.log"
+
+    file_handler = RotatingFileHandler(
+        log_file, maxBytes=10 * 1024 * 1024, backupCount=7, encoding="utf-8"  # 10 MB
     )
+    fmt = "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
+    file_handler.setFormatter(logging.Formatter(fmt))
+
+    # 配置 root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
+
+    # 避免重复添加
+    if not any(isinstance(h, RotatingFileHandler) for h in root_logger.handlers):
+        root_logger.addHandler(file_handler)
+
 
 if __name__ == "__main__":
     setup_logging()
