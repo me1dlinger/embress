@@ -116,11 +116,6 @@ class EmbressRenamer:
             file_handler.setFormatter(formatter)
             logger.addHandler(file_handler)
 
-            # 控制台 handler
-            console_handler = logging.StreamHandler()
-            console_handler.setFormatter(formatter)
-            logger.addHandler(console_handler)
-
         return logger
 
     def _extract_episode_info(
@@ -220,7 +215,6 @@ class EmbressRenamer:
         return name.strip()
 
     def _rename_file_and_subtitles(self, file_path: Path, new_name: str) -> List[Dict]:
-        """重命名主文件，并同步处理字幕和 nfo"""
         changes: List[Dict] = []
         old_stem = file_path.stem
         new_stem = Path(new_name).stem
@@ -249,9 +243,8 @@ class EmbressRenamer:
                 self.logger.error(f"重命名失败: {e}")
                 return changes
 
-        subtitle_exts = {".ass", ".srt", ".vtt", ".sub"}
         for sub in file_path.parent.iterdir():
-            if not sub.is_file() or sub.suffix.lower() not in subtitle_exts:
+            if not sub.is_file() or sub.suffix.lower() not in SUBTITLE_EXTS:
                 continue
             if not re.match(re.escape(old_stem) + r"(\.|$)", sub.stem, re.I):
                 continue
@@ -312,14 +305,14 @@ class EmbressRenamer:
         if not record_file.exists():
             return []
 
+        # --- 读取并提取映射 ---------------------------------------------------
         try:
             records = json.loads(record_file.read_text("utf-8"))
         except Exception:
             self.logger.warning("读取 rename_record.json 失败: %s", record_file)
             return []
 
-        # original -> (latest_new, timestamp) （只保留 latest）
-        latest_map: Dict[str, Tuple[str, str]] = {}
+        latest_map: Dict[str, Tuple[str, str]] = {}  # original -> (latest_new, ts)
         for r in records:
             if r.get("type") != "rename" or r.get("status") != "success":
                 continue
@@ -329,41 +322,70 @@ class EmbressRenamer:
             if (orig not in latest_map) or (ts > latest_map[orig][1]):
                 latest_map[orig] = (new, ts)
 
+        if not latest_map:
+            return []
+
+        # --- 统一处理字幕 & NFO -------------------------------------------------
         changes: List[Dict] = []
-        for sub in season_dir.iterdir():
-            if not sub.is_file() or sub.suffix.lower() not in SUBTITLE_EXTS:
-                continue
-            for orig, (latest_new, _) in latest_map.items():
-                orig_stem = Path(orig).stem
-                if not re.match(rf"{re.escape(orig_stem)}(\.|$)", sub.stem, re.I):
+        for orig, (latest_new, _) in latest_map.items():  # ← 一个 for 里搞定两件事
+            orig_stem = Path(orig).stem
+            new_stem = Path(latest_new).stem
+
+            for item in season_dir.iterdir():
+                if not item.is_file():
                     continue
-                new_stem = Path(latest_new).stem
-                new_name = f"{new_stem}{sub.name[len(orig_stem):]}"
-                new_path = sub.with_name(new_name)
-                if new_path.exists():
-                    break  # 已存在同名文件
-                try:
-                    sub.rename(new_path)
-                    changes.append(
-                        {
-                            "type": "subtitle_rename",
-                            "original": sub.name,
-                            "new": new_name,
-                            "status": "success",
-                        }
-                    )
-                    self.logger.info("修复字幕: %s → %s", sub.name, new_name)
-                except Exception as e:
-                    changes.append(
-                        {
-                            "type": "subtitle_rename",
-                            "original": sub.name,
-                            "new": new_name,
-                            "status": "failed",
-                            "error": str(e),
-                        }
-                    )
-                break
+                if item.suffix.lower() in SUBTITLE_EXTS and re.match(
+                    rf"{re.escape(orig_stem)}(\.|$)", item.stem, re.I
+                ):
+                    remainder = item.name[len(orig_stem) :]
+                    new_name = f"{new_stem}{remainder}"
+                    new_path = item.with_name(new_name)
+
+                    if not new_path.exists():
+                        try:
+                            item.rename(new_path)
+                            changes.append(
+                                {
+                                    "type": "subtitle_rename",
+                                    "original": item.name,
+                                    "new": new_name,
+                                    "status": "success",
+                                }
+                            )
+                            self.logger.info("修复字幕: %s → %s", item.name, new_name)
+                        except Exception as e:
+                            changes.append(
+                                {
+                                    "type": "subtitle_rename",
+                                    "original": item.name,
+                                    "new": new_name,
+                                    "status": "failed",
+                                    "error": str(e),
+                                }
+                            )
+
+                # 2) NFO 删除
+                if item.suffix.lower() in {".nfo", ".NFO"} and item.stem == orig_stem:
+                    try:
+                        item.unlink()
+                        changes.append(
+                            {
+                                "type": "nfo_delete",
+                                "original": item.name,
+                                "status": "success",
+                            }
+                        )
+                        self.logger.info("删除残留 NFO 文件: %s", item.name)
+                    except Exception as e:
+                        changes.append(
+                            {
+                                "type": "nfo_delete",
+                                "original": item.name,
+                                "status": "failed",
+                                "error": str(e),
+                            }
+                        )
+
         return changes
 
     def _save_change_record(
@@ -623,6 +645,9 @@ class EmbressRenamer:
                 renamed += 1
         if self.current_sub_path is not None:
             orphan_changes = self._sync_orphan_subtitles(season_dir)
+            self.logger.info(
+                f"Orphan subtitles processed: {len(orphan_changes)} changes."
+            )
             if orphan_changes:
                 season_changes.extend(orphan_changes)
                 renamed += self._count_success_renames(orphan_changes)
