@@ -481,6 +481,15 @@ class EmbressRenamer:
         )
 
     @staticmethod
+    def _count_success_by_type(changes: List[Dict]) -> Dict[str, int]:
+        stats = {"rename": 0, "subtitle_rename": 0, "nfo_delete": 0}
+        for c in changes:
+            t, s = c.get("type"), c.get("status")
+            if t in stats and s == "success":
+                stats[t] += 1
+        return stats
+
+    @staticmethod
     def _build_skip_record(file_name: str) -> List[Dict]:
         return [
             {
@@ -498,6 +507,8 @@ class EmbressRenamer:
         )
         processed_files_list: List[Dict] = []
         total, renamed = 0, 0
+        renamed_subtitle = 0
+        deleted_nfo = 0
         video_exts = {
             ".mkv",
             ".mp4",
@@ -529,7 +540,7 @@ class EmbressRenamer:
             self.logger.info(
                 f"Processing season directory: {root_path} (Media type: {media_type})"
             )
-            p_list, t_inc, r_inc = self._scan_single_season(
+            p_list, t_inc, r_inc, s_inc, n_inc = self._scan_single_season(
                 season_dir=root_path,
                 parent_show=root_path.parent,
                 video_exts=video_exts,
@@ -538,6 +549,8 @@ class EmbressRenamer:
             processed_files_list.extend(p_list)
             total += t_inc
             renamed += r_inc
+            renamed_subtitle += s_inc
+            deleted_nfo += n_inc
         elif self._is_show_dir(root_path):
             self.logger.info(f"Processing show directory: {root_path}")
             for season_dir in root_path.iterdir():
@@ -546,7 +559,7 @@ class EmbressRenamer:
                 )
                 media_type = self._extract_media_type(root_path)
                 if season_dir.is_dir() and self._is_season_dir(season_dir):
-                    p_list, t_inc, r_inc = self._scan_single_season(
+                    p_list, t_inc, r_inc, s_inc, n_inc = self._scan_single_season(
                         season_dir=season_dir,
                         parent_show=root_path,
                         video_exts=video_exts,
@@ -555,11 +568,13 @@ class EmbressRenamer:
                     processed_files_list.extend(p_list)
                     total += t_inc
                     renamed += r_inc
+                    renamed_subtitle += s_inc
+                    deleted_nfo += n_inc
         else:
             self.logger.info(f"Processing base directory: {root_path}")
             for show_dir, season_dir in self._iter_season_dirs(root_path):
                 media_type = self._extract_media_type(season_dir)
-                p_list, t_inc, r_inc = self._scan_single_season(
+                p_list, t_inc, r_inc, s_inc, n_inc = self._scan_single_season(
                     season_dir=season_dir,
                     parent_show=show_dir,
                     video_exts=video_exts,
@@ -568,6 +583,8 @@ class EmbressRenamer:
                 processed_files_list.extend(p_list)
                 total += t_inc
                 renamed += r_inc
+                renamed_subtitle += s_inc
+                deleted_nfo += n_inc
         unrenamed_files = [
             {"path": f["path"]}
             for f in processed_files_list
@@ -580,6 +597,8 @@ class EmbressRenamer:
             "status": "completed",
             "processed": total,
             "renamed": renamed,
+            "renamed_subtitle": renamed_subtitle,
+            "deleted_nfo": deleted_nfo,
             "unrenamed_count": len(unrenamed_files),
             "unrenamed_files": unrenamed_files,
             "timestamp": datetime.datetime.now().isoformat(),
@@ -617,10 +636,11 @@ class EmbressRenamer:
         parent_show: Path,
         video_exts: Set[str],
         media_type_name: str,
-    ) -> Tuple[List[Dict], int, int]:
+    ) -> Tuple[List[Dict], int, int, int, int]:
         processed_files_list: List[Dict] = []
         total, renamed = 0, 0
-
+        renamed_sub = 0
+        deleted_nfo = 0
         processed_files = self._season_processed_set(season_dir)
         season_num_hint = self._get_season_from_path(season_dir)
         season_changes: List[Dict] = []
@@ -650,10 +670,13 @@ class EmbressRenamer:
             )
             if orphan_changes:
                 season_changes.extend(orphan_changes)
-                renamed += self._count_success_renames(orphan_changes)
         if season_changes:
             self._save_change_record(season_dir, media_type_name, season_changes)
-        return processed_files_list, total, renamed
+            counts = self._count_success_by_type(season_changes)
+            renamed = counts.get("rename", 0)
+            renamed_sub = counts.get("subtitle_rename", 0)
+            deleted_nfo = counts.get("nfo_delete", 0)
+        return processed_files_list, total, renamed, renamed_sub, deleted_nfo
 
     def _process_episode_file(
         self,
