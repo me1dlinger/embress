@@ -48,6 +48,18 @@ def scheduled_scan() -> None:
         config_db.add_scan_history(error_result)
 
 
+def _dedup_latest(records: list[dict]) -> list[dict]:
+    latest_map = {}
+    for rec in records:
+        key = rec.get("path") or rec.get("new")  # 两者理论相同，这里选 path 更稳
+        ts = rec.get("timestamp", "")
+        if not key:
+            continue
+        if key not in latest_map or ts > latest_map[key]["timestamp"]:
+            latest_map[key] = rec
+    return list(latest_map.values())
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -147,7 +159,7 @@ def rollback_season():
 
     rollback_results = []
     rolled_back_cnt = 0
-
+    original_records = _dedup_latest(original_records)
     for rec in original_records:
         if (
             rec.get("type") != "rename"

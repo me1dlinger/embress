@@ -98,9 +98,9 @@ class EmbressRenamer:
     def _setup_logger(self) -> logging.Logger:
         logger = logging.getLogger("EmbressRenamer")
 
-        if not logger.handlers:  # 只初始化一次
+        if not logger.handlers:
             logger.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
-            logger.propagate = False  # 阻止向 root 传播导致重复
+            logger.propagate = False
 
             # 文件 handler
             LOGS_PATH.mkdir(parents=True, exist_ok=True)
@@ -409,6 +409,9 @@ class EmbressRenamer:
         ]
 
     def scan_and_rename(self, sub_path: Optional[str] = None) -> Dict:
+        self.logger.info(
+            f"Starting media scan and rename process. Target: '{sub_path or 'ALL'}'"
+        )
         processed_files_list: List[Dict] = []
         total, renamed = 0, 0
         video_exts = {
@@ -439,6 +442,9 @@ class EmbressRenamer:
             }
         if self._is_season_dir(root_path):
             media_type = self._extract_media_type(root_path)
+            self.logger.info(
+                f"Processing season directory: {root_path} (Media type: {media_type})"
+            )
             p_list, t_inc, r_inc = self._scan_single_season(
                 season_dir=root_path,
                 parent_show=root_path.parent,
@@ -449,7 +455,11 @@ class EmbressRenamer:
             total += t_inc
             renamed += r_inc
         elif self._is_show_dir(root_path):
+            self.logger.info(f"Processing show directory: {root_path}")
             for season_dir in root_path.iterdir():
+                self.logger.info(
+                    f"Processing season: {season_dir} (Media type: {media_type})"
+                )
                 media_type = self._extract_media_type(root_path)
                 if season_dir.is_dir() and self._is_season_dir(season_dir):
                     p_list, t_inc, r_inc = self._scan_single_season(
@@ -462,6 +472,7 @@ class EmbressRenamer:
                     total += t_inc
                     renamed += r_inc
         else:
+            self.logger.info(f"Processing base directory: {root_path}")
             for show_dir, season_dir in self._iter_season_dirs(root_path):
                 media_type = self._extract_media_type(season_dir)
                 p_list, t_inc, r_inc = self._scan_single_season(
@@ -478,6 +489,9 @@ class EmbressRenamer:
             for f in processed_files_list
             if f.get("status") not in finished_statuses
         ]
+        self.logger.info(
+            f"Scan completed: {total} files processed, {renamed} files renamed."
+        )
         return {
             "status": "completed",
             "processed": total,
@@ -541,7 +555,8 @@ class EmbressRenamer:
             )
             processed_files_list.append(file_info)
             season_changes.extend(changes)
-            total += 1
+            if file_info.get("status") != STATUS_WHITELIST:
+                total += 1
             if renamed_flag:
                 renamed += 1
         if season_changes:
