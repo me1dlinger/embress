@@ -332,14 +332,12 @@ new Vue({
           body: JSON.stringify({ sub_path: this.subPath.trim() }),
         });
         const data = await resp.json();
-
         if (data.success) {
           this.lastScanResult = data.result;
           // 刷新相关面板
           this.loadHistory();
           this.loadChangeRecords();
           this.loadSystemStatus();
-          // 自动关闭
           this.closeSubPathRollbackModal();
         } else {
           alert(
@@ -353,9 +351,6 @@ new Vue({
         this.subScanLoading = false;
       }
     },
-    // 在 main.js 的 methods 对象中添加以下方法：
-
-    // 显示未重命名文件弹窗
     showUnrenamedFiles(files) {
       this.unrenamedFiles = files || [];
       this.showUnrenamedModal = true;
@@ -440,7 +435,6 @@ new Vue({
       this.deleteFromWhitelistLoading = true;
 
       try {
-        // 预留接口调用
         const response = await fetch("/api/whitelist", {
           method: "DELETE",
           headers: {

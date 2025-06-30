@@ -97,7 +97,7 @@
             <!-- 仪表板 -->
             <div v-show="activeTab === 'dashboard'" class="tab-pane fade show active">
               <div class="row mt-4">
-                <div class="col-lg-8">
+                <div class="col-lg-7">
                   <div class="dashboard-card status-card">
                     <div class="card-header d-flex align-items-center">
                       <i class="bi bi-info-circle me-2"></i>
@@ -158,14 +158,14 @@
                   </div>
                 </div>
 
-                <div class="col-lg-4">
-                  <div class="dashboard-card">
+                <div class="col-lg-5">
+                  <div class="dashboard-card action-card">
                     <div class="card-header d-flex align-items-center">
                       <i class="bi bi-gear me-2"></i>
                       <span>操作面板</span>
                     </div>
                     <div class="card-body">
-                      <div class="row mt-4">
+                      <div class="row mt-2">
                         <div class="col-6">
                           <button class="btn btn-success w-100 mb-3" @click="performManualScan" :disabled="scanLoading">
                             <span v-if="scanLoading" class="spinner-border spinner-border-sm" role="status"></span>
@@ -179,7 +179,7 @@
                           </button>
                         </div>
                       </div>
-                      <div class="row mt-4">
+                      <div class="row mt-2">
                         <div class="col-6">
                           <button class="btn btn-info w-100 mb-3" @click="showSubPathModal = true">
 
@@ -230,9 +230,13 @@
                               <strong>处理文件:</strong> [[
                               lastScanResult.processed ]]
                             </p>
+                            <div v-if="lastScanResult.deleted_nfo" class="d-flex align-items-center mb-2">
+                              <strong class="me-2">删除:</strong>
+                              <span>[[ lastScanResult.deleted_nfo ]] 个nfo文件</span>
+                            </div>
                             <div class="d-flex align-items-center mb-2">
                               <strong class="me-2">重命名:</strong>
-                              <span>[[ lastScanResult.renamed ]] 个文件</span>
+                              <span>[[ lastScanResult.renamed ]] 个视频 | [[ lastScanResult.renamed_subtitle ]] 个字幕</span>
                               <span v-if="lastScanResult.unrenamed_count > 0" class="ms-3">
                                 <span class="badge bg-warning text-dark me-2">
                                   <i class="bi bi-exclamation-triangle me-1"></i>
@@ -308,9 +312,14 @@
                                   <strong>处理:</strong> [[ record.processed
                                   ]] 个文件
                                 </p>
+                                <p>
+                                  <strong>删除:</strong> [[ record.deleted_nfo
+                                  ]] 个nfo文件
+                                </p>
                                 <div class="d-flex align-items-center mb-2">
                                   <strong class="me-2">重命名:</strong>
-                                  <span>[[ record.renamed ]] 个文件</span>
+                                  <span>[[ record.renamed ]] 个视频 | [[ record.renamed_subtitle
+                                    ]] 个字幕</span>
                                   <span v-if="record.unrenamed_count > 0" class="ms-3">
                                     <span class="badge bg-warning text-dark me-2">
                                       <i class="bi bi-exclamation-triangle me-1"></i>
@@ -322,6 +331,7 @@
                                     </button>
                                   </span>
                                 </div>
+
                               </div>
                               <div v-else>
                                 <p>
@@ -375,17 +385,21 @@
                                 <i v-else class="bi"
                                   :class="record.status === 'success' ? 'bi-check-circle text-success' : 'bi-x-circle text-danger'"></i>
                                 [[ record.type === 'rename' ? '文件重命名' :
-                                '字幕重命名' ]]
+                                record.type === 'subtitle_rename' ? '字幕重命名':'NFO删除' ]]
                               </h6>
                               <p class="mb-1">
                                 <strong>节目:</strong> [[ record.show ]] / [[
                                 record.season ]]
                               </p>
-                              <p class="mb-1">
+                              <p class="mb-1" v-if="record.type === 'nfo_delete'">
+                                <strong>文件名:</strong>
+                                <code> [[ record.original ]] </code>
+                              </p>
+                              <p class="mb-1" v-else>
                                 <strong>原文件名:</strong>
                                 <code> [[ record.original ]] </code>
                               </p>
-                              <p class="mb-1">
+                              <p class="mb-1" v-if="record.type !== 'nfo_delete'">
                                 <strong>新文件名:</strong>
                                 <code> [[ record.new ]] </code>
                               </p>
@@ -629,7 +643,7 @@
 
               <div class="whitelist-files-list">
                 <div v-for="(item, index) in newWhitelistItems" :key="'new-' + index"
-                  class="whitelist-file-item new-item" >
+                  class="whitelist-file-item new-item">
                   <div class="file-info">
                     <div class="file-name">
                       <i class="bi" :class="item.type === 'directory' ? 'bi-folder-fill' : 'bi-file-earmark'" me-2></i>
@@ -648,9 +662,9 @@
                     <i class="bi bi-trash me-1"></i>移除
                   </button>
                 </div>
-                <div v-for="(file, index) in whitelistFiles" :key="'existing-' + index" class="whitelist-file-item" 
-                 :class="file.type === 'file' ? 'file-type' : 'directory-type'">
-                  
+                <div v-for="(file, index) in whitelistFiles" :key="'existing-' + index" class="whitelist-file-item"
+                  :class="file.type === 'file' ? 'file-type' : 'directory-type'">
+
                   <div v-if="file.type=='file'" class="file-info">
                     <div class="file-name">
                       <i class="bi bi-file-earmark me-2"></i>
@@ -661,7 +675,7 @@
                       [[ getDirectoryPath(file.path) ]]
                     </div>
                   </div>
-                  <div v-else  class="file-info">
+                  <div v-else class="file-info">
                     <div class="file-name">
                       <i class="bi bi-file-earmark me-2"></i>
                       <strong>[[ file.path ]]</strong>
@@ -679,8 +693,8 @@
           </div>
           <div class="modal-footer">
             <button class="btn btn-secondary" @click="closeWhitelistModal">关闭</button>
-            <button v-if="newWhitelistItems.length > 0" class="btn btn-success" style="margin-left: 20px;" @click="submitNewWhitelistItems"
-              :disabled="submitWhitelistLoading">
+            <button v-if="newWhitelistItems.length > 0" class="btn btn-success" style="margin-left: 20px;"
+              @click="submitNewWhitelistItems" :disabled="submitWhitelistLoading">
               <span v-if="submitWhitelistLoading" class="spinner-border spinner-border-sm me-1"></span>
               <i v-else class="bi bi-check-circle me-1"></i>
               提交新增项目 ([[ newWhitelistItems.length ]])

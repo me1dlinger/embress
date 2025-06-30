@@ -194,7 +194,12 @@
 
  /* 状态卡片样式 */
  .status-card {
+   height: 310px;
    border-left: 4px solid var(--primary);
+ }
+
+ .action-card {
+   height: 310px;
  }
 
  .status-highlight {
@@ -539,23 +544,25 @@
    border-radius: 8px;
    padding: 0.5rem;
  }
-.modal-content-custom.unrenamed-modal {
-  max-width: 800px;
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-}
-.modal-content-custom.unrenamed-modal .modal-body {
-  flex: 1;
-  overflow-y: auto;
-  max-height: 80vh;
-  padding: 1.5rem;
-}
 
-.modal-content-custom.unrenamed-modal .modal-footer {
-  flex-shrink: 0;
-  padding: 1rem 1.5rem;
-}
+ .modal-content-custom.unrenamed-modal {
+   max-width: 800px;
+   max-height: 90vh;
+   display: flex;
+   flex-direction: column;
+ }
+
+ .modal-content-custom.unrenamed-modal .modal-body {
+   flex: 1;
+   overflow-y: auto;
+   max-height: 80vh;
+   padding: 1.5rem;
+ }
+
+ .modal-content-custom.unrenamed-modal .modal-footer {
+   flex-shrink: 0;
+   padding: 1rem 1.5rem;
+ }
 
  .whitelist-file-item {
    display: flex;

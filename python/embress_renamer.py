@@ -214,6 +214,91 @@ class EmbressRenamer:
         name = re.sub(r"\s+\.", ".", name)  # 点号前空格
         return name.strip()
 
+    def _rollback_file_and_subtitles(
+        self, file_path: Path, new_name: str, original_records: List[Dict] = None
+    ) -> List[Dict]:
+        changes: List[Dict] = []
+        old_stem = file_path.stem
+        new_stem = Path(new_name).stem
+        new_file_path = file_path.parent / new_name
+
+        if file_path != new_file_path and not new_file_path.exists():
+            try:
+                file_path.rename(new_file_path)
+                changes.append(
+                    {
+                        "type": "rename",
+                        "original": file_path.name,
+                        "new": new_name,
+                        "status": "success",
+                    }
+                )
+            except Exception as e:
+                changes.append(
+                    {
+                        "type": "rename",
+                        "original": file_path.name,
+                        "new": new_name,
+                        "status": "failed",
+                        "error": str(e),
+                    }
+                )
+                self.logger.error(f"重命名失败: {e}")
+                return changes
+
+        # 处理字幕文件还原
+        for sub in file_path.parent.iterdir():
+            if not sub.is_file() or sub.suffix.lower() not in SUBTITLE_EXTS:
+                continue
+            if not re.match(re.escape(old_stem) + r"(\.|$)", sub.stem, re.I):
+                continue
+
+            remainder = sub.name[len(old_stem) :]
+            new_sub_name = f"{new_stem}{remainder}"
+            new_sub_path = sub.parent / new_sub_name
+
+            if new_sub_path.exists():
+                continue
+
+            try:
+                sub.rename(new_sub_path)
+                changes.append(
+                    {
+                        "type": "subtitle_rename",
+                        "original": sub.name,
+                        "new": new_sub_name,
+                        "status": "success",
+                    }
+                )
+
+                # 在original_records中查找对应的字幕重命名记录并标记rollback=True
+                if original_records:
+                    for record in original_records:
+                        if (
+                            record.get("type") == "subtitle_rename"
+                            and record.get("status") == "success"
+                            and record.get("rollback") is not True
+                            and record.get("new")
+                            == sub.name  # 当前字幕文件名匹配记录中的new字段
+                            and record.get("original")
+                            == new_sub_name  # 目标字幕文件名匹配记录中的original字段
+                        ):
+                            record["rollback"] = True
+                            break
+
+            except Exception as e:
+                changes.append(
+                    {
+                        "type": "subtitle_rename",
+                        "original": sub.name,
+                        "new": new_sub_name,
+                        "status": "failed",
+                        "error": str(e),
+                    }
+                )
+
+        return changes
+
     def _rename_file_and_subtitles(self, file_path: Path, new_name: str) -> List[Dict]:
         changes: List[Dict] = []
         old_stem = file_path.stem
@@ -481,6 +566,14 @@ class EmbressRenamer:
         )
 
     @staticmethod
+    def _count_subtitle_success_renames(changes: List[Dict]) -> int:
+        return sum(
+            1
+            for c in changes
+            if c.get("type") == "subtitle_rename" and c.get("status") == "success"
+        )
+
+    @staticmethod
     def _count_success_by_type(changes: List[Dict]) -> Dict[str, int]:
         stats = {"rename": 0, "subtitle_rename": 0, "nfo_delete": 0}
         for c in changes:
@@ -535,7 +628,9 @@ class EmbressRenamer:
                 "target": str(sub_path or "ALL"),
                 "timestamp": datetime.datetime.now().isoformat(),
             }
+
         if self._is_season_dir(root_path):
+            print("识别是季度")
             media_type = self._extract_media_type(root_path)
             self.logger.info(
                 f"Processing season directory: {root_path} (Media type: {media_type})"
@@ -552,12 +647,13 @@ class EmbressRenamer:
             renamed_subtitle += s_inc
             deleted_nfo += n_inc
         elif self._is_show_dir(root_path):
+            print("识别是节目")
             self.logger.info(f"Processing show directory: {root_path}")
             for season_dir in root_path.iterdir():
+                media_type = self._extract_media_type(root_path)
                 self.logger.info(
                     f"Processing season: {season_dir} (Media type: {media_type})"
                 )
-                media_type = self._extract_media_type(root_path)
                 if season_dir.is_dir() and self._is_season_dir(season_dir):
                     p_list, t_inc, r_inc, s_inc, n_inc = self._scan_single_season(
                         season_dir=season_dir,

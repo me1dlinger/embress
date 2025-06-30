@@ -168,6 +168,7 @@ def rollback_season():
         ):
             continue
         cur_path = Path(rec["path"])
+
         original_name = rec["original"]
         if not cur_path.exists():
             rollback_results.append(
@@ -182,9 +183,10 @@ def rollback_season():
                 }
             )
             continue
-
         try:
-            changes = renamer._rename_file_and_subtitles(cur_path, original_name)
+            changes = renamer._rollback_file_and_subtitles(
+                cur_path, original_name, original_records
+            )
             if renamer._count_success_renames(changes):
                 rolled_back_cnt += 1
                 rollback_result = {
@@ -197,6 +199,21 @@ def rollback_season():
                 }
                 rollback_results.append(rollback_result)
                 rec["rollback"] = True
+                for change in changes:
+                    if (
+                        change.get("type") == "subtitle_rename"
+                        and change.get("status") == "success"
+                    ):
+                        rolled_back_cnt += 1
+                        rollback_result = {
+                            "type": "subtitle_rollback",
+                            "original": change["original"],
+                            "new": change["new"],
+                            "status": "rolled_back",
+                            "timestamp": datetime.datetime.now().isoformat(),
+                            "path": str((cur_path.parent / change["new"]).absolute()),
+                        }
+                        rollback_results.append(rollback_result)
             else:
                 rollback_results.append(
                     {
@@ -362,10 +379,7 @@ def get_change_records():
                 try:
                     season_records = json.loads(record_file.read_text(encoding="utf-8"))
                     for rec in season_records:
-                        if (
-                            rec.get("status") == "success"
-                            and rec.get("type") != "nfo_delete"
-                        ):
+                        if rec.get("status") == "success":
                             rec.update(
                                 media_type=media_type_dir.name,
                                 show=show_dir.name,
@@ -425,7 +439,7 @@ def setup_logging() -> None:
     log_file = LOGS_PATH / f"app_{datetime.datetime.now():%Y%m%d}.log"
 
     file_handler = RotatingFileHandler(
-        log_file, maxBytes=10 * 1024 * 1024, backupCount=7, encoding="utf-8"  # 10 MB
+        log_file, maxBytes=10 * 1024 * 1024, backupCount=7, encoding="utf-8"
     )
     fmt = "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
     file_handler.setFormatter(logging.Formatter(fmt))
@@ -434,9 +448,10 @@ def setup_logging() -> None:
     root_logger = logging.getLogger()
     root_logger.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
 
-    # 避免重复添加
     if not any(isinstance(h, RotatingFileHandler) for h in root_logger.handlers):
         root_logger.addHandler(file_handler)
+    app.logger.handlers = root_logger.handlers
+    app.logger.setLevel(root_logger.level)
 
 
 if __name__ == "__main__":
