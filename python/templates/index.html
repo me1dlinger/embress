@@ -679,7 +679,6 @@
           </div>
           <div class="modal-footer">
             <button class="btn btn-secondary" @click="closeWhitelistModal">关闭</button>
-            
             <button v-if="newWhitelistItems.length > 0" class="btn btn-success" style="margin-left: 20px;" @click="submitNewWhitelistItems"
               :disabled="submitWhitelistLoading">
               <span v-if="submitWhitelistLoading" class="spinner-border spinner-border-sm me-1"></span>

@@ -29,6 +29,8 @@ STATUS_UNMATCHED = "unmatched"
 STATUS_WHITELIST = "whitelisted"
 STATUS_UNPROCESSED = "unprocessed"
 
+SUBTITLE_EXTS: Set[str] = {".ass", ".srt", ".vtt", ".sub"}
+
 SEASON_PATTERNS = [
     re.compile(r"season[ _\-]?(\d{1,2})", re.I),
     re.compile(r"s(\d{1,2})$", re.I),
@@ -305,6 +307,65 @@ class EmbressRenamer:
 
         return changes
 
+    def _sync_orphan_subtitles(self, season_dir: Path) -> List[Dict]:
+        record_file = season_dir / "rename_record.json"
+        if not record_file.exists():
+            return []
+
+        try:
+            records = json.loads(record_file.read_text("utf-8"))
+        except Exception:
+            self.logger.warning("读取 rename_record.json 失败: %s", record_file)
+            return []
+
+        # original -> (latest_new, timestamp) （只保留 latest）
+        latest_map: Dict[str, Tuple[str, str]] = {}
+        for r in records:
+            if r.get("type") != "rename" or r.get("status") != "success":
+                continue
+            orig, new, ts = r.get("original"), r.get("new"), r.get("timestamp", "")
+            if not (orig and new):
+                continue
+            if (orig not in latest_map) or (ts > latest_map[orig][1]):
+                latest_map[orig] = (new, ts)
+
+        changes: List[Dict] = []
+        for sub in season_dir.iterdir():
+            if not sub.is_file() or sub.suffix.lower() not in SUBTITLE_EXTS:
+                continue
+            for orig, (latest_new, _) in latest_map.items():
+                orig_stem = Path(orig).stem
+                if not re.match(rf"{re.escape(orig_stem)}(\.|$)", sub.stem, re.I):
+                    continue
+                new_stem = Path(latest_new).stem
+                new_name = f"{new_stem}{sub.name[len(orig_stem):]}"
+                new_path = sub.with_name(new_name)
+                if new_path.exists():
+                    break  # 已存在同名文件
+                try:
+                    sub.rename(new_path)
+                    changes.append(
+                        {
+                            "type": "subtitle_rename",
+                            "original": sub.name,
+                            "new": new_name,
+                            "status": "success",
+                        }
+                    )
+                    self.logger.info("修复字幕: %s → %s", sub.name, new_name)
+                except Exception as e:
+                    changes.append(
+                        {
+                            "type": "subtitle_rename",
+                            "original": sub.name,
+                            "new": new_name,
+                            "status": "failed",
+                            "error": str(e),
+                        }
+                    )
+                break
+        return changes
+
     def _save_change_record(
         self, season_dir: Path, media_type: str, changes: List[Dict]
     ):
@@ -409,6 +470,7 @@ class EmbressRenamer:
         ]
 
     def scan_and_rename(self, sub_path: Optional[str] = None) -> Dict:
+        self.current_sub_path = sub_path
         self.logger.info(
             f"Starting media scan and rename process. Target: '{sub_path or 'ALL'}'"
         )
@@ -559,6 +621,11 @@ class EmbressRenamer:
                 total += 1
             if renamed_flag:
                 renamed += 1
+        if self.current_sub_path is not None:
+            orphan_changes = self._sync_orphan_subtitles(season_dir)
+            if orphan_changes:
+                season_changes.extend(orphan_changes)
+                renamed += self._count_success_renames(orphan_changes)
         if season_changes:
             self._save_change_record(season_dir, media_type_name, season_changes)
         return processed_files_list, total, renamed
