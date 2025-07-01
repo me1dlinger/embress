@@ -151,6 +151,7 @@ class ConfigDB:
             "scan_history", "renamed_subtitle INTEGER DEFAULT 0"
         )
         self._add_column_if_missing("scan_history", "deleted_nfo INTEGER DEFAULT 0")
+        self._add_column_if_missing("scan_history", "scan_type TEXT")
 
     def _init_change_record_table(self):
         conn, cursor = self._get_connection()
@@ -295,13 +296,14 @@ class ConfigDB:
             cursor.execute(
                 """
                 INSERT INTO scan_history
-                (timestamp, status, message, processed, renamed,
+                (timestamp, status, scan_type, message, processed, renamed,
                 renamed_subtitle, deleted_nfo, target, data)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """,
                 (
                     result.get("timestamp"),
                     result.get("status"),
+                    result.get("scan_type", "scan"),
                     result.get("message"),
                     result.get("processed", 0),
                     result.get("renamed_video", 0),

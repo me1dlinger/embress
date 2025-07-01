@@ -204,7 +204,7 @@
                   <div class="dashboard-card">
                     <div class="card-header d-flex align-items-center">
                       <i class="bi bi-clock me-2"></i>
-                      <span>最近扫描结果</span>
+                      <span>最新处理结果</span>
                     </div>
                     <div class="card-body p-4">
                       <div v-if="!lastScanResult"
@@ -219,7 +219,7 @@
                             <i class="bi"
                               :class="lastScanResult.status === 'error' ? 'bi-x-circle' : 'bi-check-circle'"></i>
                             [[ lastScanResult.status === 'error' ? '扫描失败'
-                            : '扫描完成' ]]
+                            : lastScanResult.scan_type=='rollback'?'回滚完成':'扫描完成' ]]
                           </h6>
                           <p class="mb-2">
                             <strong>时间:</strong> [[
@@ -292,7 +292,12 @@
                           <div class="card" :class="record.status === 'error' ? 'border-danger' : 'border-success'">
                             <div class="card-header"
                               :class="record.status === 'error' ? 'bg-danger text-black' : 'bg-success text-black'">
-                              <h6 class="card-title mb-0">
+                              <h6 v-if="record.scan_type=='rollback'" class="card-title mb-0">
+                                <i class="bi"
+                                  :class="record.status === 'error' ? 'bi-x-circle' : 'bi-check-circle'"></i>
+                                回滚 # [[ history.length - index ]]
+                              </h6>
+                              <h6 v-else class="card-title mb-0">
                                 <i class="bi"
                                   :class="record.status === 'error' ? 'bi-x-circle' : 'bi-check-circle'"></i>
                                 扫描 # [[ history.length - index ]]
@@ -313,7 +318,7 @@
                                   ]] 个文件
                                 </p>
                                 <p>
-                                  <strong>删除:</strong> [[ record.deleted_nfo
+                                  <strong>删除:</strong> [[ record.deleted_nfo?record.deleted_nfo:0
                                   ]] 个nfo文件
                                 </p>
                                 <div class="d-flex align-items-center mb-2">

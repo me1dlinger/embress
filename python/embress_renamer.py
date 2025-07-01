@@ -247,8 +247,6 @@ class EmbressRenamer:
                 )
                 self.logger.error(f"重命名失败: {e}")
                 return changes
-
-        # 处理字幕文件还原
         for sub in file_path.parent.iterdir():
             if not sub.is_file() or sub.suffix.lower() not in SUBTITLE_EXTS:
                 continue
@@ -272,8 +270,6 @@ class EmbressRenamer:
                         "status": "success",
                     }
                 )
-
-                # 在original_records中查找对应的字幕重命名记录并标记rollback=True
                 if original_records:
                     for record in original_records:
                         if (
@@ -281,9 +277,9 @@ class EmbressRenamer:
                             and record.get("status") == "success"
                             and record.get("rollback") is not True
                             and record.get("new")
-                            == sub.name  # 当前字幕文件名匹配记录中的new字段
+                            == sub.name
                             and record.get("original")
-                            == new_sub_name  # 目标字幕文件名匹配记录中的original字段
+                            == new_sub_name
                         ):
                             record["rollback"] = True
                             break

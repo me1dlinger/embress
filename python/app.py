@@ -150,9 +150,10 @@ def rollback_season():
         return jsonify({"records": [], "total": 0, "error": str(e)}), 500
 
     rollback_results = []
-    rolled_back_cnt = 0
     original_records = _dedup_latest(original_records)
     nfo_changes = []
+    rolled_back_file_cnt = 0
+    rolled_back_sub_cnt = 0
     for rec in original_records:
         if (
             rec.get("type") != "rename"
@@ -181,7 +182,7 @@ def rollback_season():
             )
 
             if renamer._count_success_renames(changes):
-                rolled_back_cnt += 1
+                rolled_back_file_cnt += 1
                 rollback_result = {
                     "type": "rollback",
                     "original": rec["new"],
@@ -200,7 +201,7 @@ def rollback_season():
                         change.get("type") == "subtitle_rename"
                         and change.get("status") == "success"
                     ):
-                        rolled_back_cnt += 1
+                        rolled_back_sub_cnt += 1
                         rollback_result = {
                             "type": "subtitle_rollback",
                             "original": change["original"],
@@ -262,6 +263,17 @@ def rollback_season():
                 existing = json.loads(rollback_record_path.read_text(encoding="utf-8"))
             except Exception:
                 pass
+        rollback_result = {
+            "status": "completed",
+            "processed": rolled_back_file_cnt + rolled_back_sub_cnt,
+            "renamed": rolled_back_file_cnt,
+            "renamed_subtitle": rolled_back_sub_cnt,
+            "deleted_nfo": len(nfo_delete_records),
+            "timestamp": datetime.datetime.now().isoformat(),
+            "target": sub_path,
+            "scan_type": "rollback",
+        }
+        config_db.add_scan_history(rollback_result)
         try:
             all_records = existing + rollback_results
             rollback_record_path.write_text(
@@ -271,7 +283,12 @@ def rollback_season():
             app.logger.exception("写入 rollback.json 失败")
 
     return jsonify(
-        {"success": True, "rolled_back": rolled_back_cnt, "results": rollback_results}
+        {
+            "success": True,
+            "rolled_back_file": rolled_back_file_cnt,
+            "rolled_back_sub": rolled_back_sub_cnt,
+            "results": rollback_results,
+        }
     )
 
 

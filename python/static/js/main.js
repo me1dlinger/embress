@@ -367,7 +367,7 @@ new Vue({
         });
         const data = await resp.json();
         if (data.success) {
-          this.lastScanResult = data.result;
+          // this.lastScanResult = data.result;
           // 刷新相关面板
           this.loadHistory();
           this.loadChangeRecords();
