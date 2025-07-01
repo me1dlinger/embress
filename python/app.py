@@ -117,22 +117,17 @@ def scan_directory():
     data = request.get_json(silent=True) or {}
     sub_path = data.get("sub_path")
     if not sub_path:
-        return jsonify({"success": False, "message": "缺少 sub_path"}), 400
+        return jsonify({"success": False, "message": "缺少 sub_path"}), 200
     try:
         app.logger.info(f"开始扫描子目录: {sub_path}")
         result = renamer.scan_and_rename(sub_path=sub_path)
+        if result.get("status") == "error":
+            return jsonify({"success": False, "message": result.get("message")}), 200
         config_db.add_scan_history(result)
         return jsonify({"success": True, "result": result})
     except Exception as exc:
         app.logger.exception("扫描子目录失败")
-        error_result = {
-            "status": "error",
-            "message": str(exc),
-            "timestamp": datetime.datetime.now().isoformat(),
-            "target": sub_path,
-        }
-        config_db.add_scan_history(error_result)
-        return jsonify({"success": False, "result": error_result}), 500
+        return jsonify({"success": False, "message": str(exc)}), 200
 
 
 @app.route("/api/rollback-season", methods=["POST"])

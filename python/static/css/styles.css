@@ -817,3 +817,252 @@
      margin-bottom: 1rem;
    }
  }
+
+ .custom-modal-overlay {
+   position: fixed;
+   top: 0;
+   left: 0;
+   right: 0;
+   bottom: 0;
+   background-color: rgba(0, 0, 0, 0.45);
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   z-index: 9999;
+   transition: opacity 0.25s ease;
+ }
+
+ .custom-modal-overlay {
+   position: fixed;
+   top: 0;
+   left: 0;
+   right: 0;
+   bottom: 0;
+   background-color: rgba(0, 0, 0, 0.45);
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   z-index: 9999;
+   transition: opacity 0.25s ease;
+ }
+
+ .custom-modal {
+   background: white;
+   border-radius: 12px;
+   box-shadow: var(--card-hover-shadow);
+   width: 100%;
+   max-width: 500px;
+   overflow: hidden;
+   transform: translateY(20px);
+   opacity: 0;
+   transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+ }
+
+ .custom-modal.active {
+   transform: translateY(0);
+   opacity: 1;
+ }
+
+ .custom-modal-header {
+   padding: 1.25rem 1.5rem;
+   display: flex;
+   align-items: center;
+   border-bottom: 1px solid #e9ecef;
+   background: #f8f9fa;
+ }
+
+ .modal-icon {
+   margin-right: 12px;
+   font-size: 1.4rem;
+ }
+
+ .modal-success .modal-icon {
+   color: var(--success);
+ }
+
+ .modal-error .modal-icon {
+   color: var(--error);
+ }
+
+ .modal-warning .modal-icon {
+   color: var(--warning);
+ }
+
+ .modal-info .modal-icon {
+   color: var(--info);
+ }
+
+ .modal-title {
+   font-weight: 700;
+   font-size: 1.25rem;
+   margin: 0;
+   color: var(--dark);
+ }
+
+ /* 重点优化的modal-body样式 */
+ .custom-modal-body {
+   padding: 1.75rem;
+   color: #495057;
+   line-height: 1.7;
+   max-height: 60vh;
+   overflow-y: auto;
+ }
+
+ .modal-body-content {
+   font-size: 1.05rem;
+   margin-bottom: 1.5rem;
+   color: #495057;
+ }
+
+ .modal-body-content p {
+   margin-bottom: 1rem;
+ }
+
+ .modal-body-content strong {
+   color: var(--dark);
+   font-weight: 600;
+ }
+
+ .modal-list {
+   list-style-type: none;
+   padding: 0;
+   margin: 1.5rem 0;
+ }
+
+ .modal-list li {
+   padding: 0.75rem 1rem;
+   background: #f8f9fa;
+   border-radius: 6px;
+   margin-bottom: 0.5rem;
+   display: flex;
+   align-items: center;
+   border-left: 3px solid var(--primary-light);
+ }
+
+ .modal-list li i {
+   margin-right: 10px;
+   color: var(--primary);
+ }
+
+ .modal-code-block {
+   background: #f8f9fa;
+   border-radius: 6px;
+   padding: 1rem;
+   font-family: 'Fira Code', 'Courier New', monospace;
+   font-size: 0.9rem;
+   margin: 1rem 0;
+   border-left: 3px solid var(--info);
+ }
+
+ .modal-alert {
+   padding: 1rem;
+   border-radius: 8px;
+   margin: 1.5rem 0;
+   display: flex;
+   align-items: flex-start;
+ }
+
+ .modal-alert i {
+   font-size: 1.25rem;
+   margin-right: 0.75rem;
+   margin-top: 0.25rem;
+ }
+
+ .alert-success {
+   background: rgba(6, 214, 160, 0.1);
+   border-left: 3px solid var(--success);
+ }
+
+ .alert-error {
+   background: rgba(239, 71, 111, 0.1);
+   border-left: 3px solid var(--error);
+ }
+
+ .alert-warning {
+   background: rgba(255, 209, 102, 0.1);
+   border-left: 3px solid var(--warning);
+ }
+
+ .alert-info {
+   background: rgba(17, 138, 178, 0.1);
+   border-left: 3px solid var(--info);
+ }
+
+ .custom-modal-footer {
+   padding: 1.25rem 1.5rem;
+   display: flex;
+   justify-content: flex-end;
+   border-top: 1px solid #e9ecef;
+   background: #f8f9fa;
+ }
+
+ .modal-btn {
+   border-radius: 8px;
+   padding: 0.65rem 1.75rem;
+   font-weight: 600;
+   letter-spacing: 0.4px;
+   transition: var(--transition);
+   border: none;
+   cursor: pointer;
+   font-size: 1rem;
+ }
+
+ .modal-btn-primary {
+   background: linear-gradient(135deg, var(--primary) 0%, #2667ff 100%);
+   color: white;
+ }
+
+ .modal-btn-primary:hover {
+   background: linear-gradient(135deg, #4d96ff 0%, #3a7cff 100%);
+   transform: translateY(-2px);
+   box-shadow: 0 4px 12px rgba(58, 134, 255, 0.3);
+ }
+
+ .modal-btn-secondary {
+   background-color: #f8f9fa;
+   color: #495057;
+   border: 1px solid #e9ecef;
+   margin-right: 10px;
+ }
+
+ .modal-btn-secondary:hover {
+   background-color: #e9ecef;
+ }
+
+ /* 弹窗动画 */
+ @keyframes fadeIn {
+   from {
+     opacity: 0;
+     transform: translateY(20px);
+   }
+
+   to {
+     opacity: 1;
+     transform: translateY(0);
+   }
+ }
+
+ .fade-enter-active,
+ .fade-leave-active {
+   transition: opacity 0.25s ease;
+ }
+
+ .fade-enter,
+ .fade-leave-to {
+   opacity: 0;
+ }
+
+ /* 响应式调整 */
+ @media (max-width: 768px) {
+   .custom-modal {
+     max-width: 90vw;
+   }
+
+   .custom-modal-body {
+     padding: 1.25rem;
+   }
+
+   .modal-btn {
+     padding: 0.6rem 1.25rem;
+   }
+ }

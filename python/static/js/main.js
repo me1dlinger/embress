@@ -60,6 +60,14 @@ new Vue({
     newWhitelistType: "file",
     newWhitelistItems: [],
     submitWhitelistLoading: false,
+
+    showModal: false,
+    modalType: "info",
+    modalTitle: "提示",
+    modalContent: "这是一条消息",
+    modalIcon: "bi-info-circle",
+    hasCancel: false,
+    confirmCallback: null,
   },
 
   mounted() {
@@ -180,12 +188,22 @@ new Vue({
           this.loadHistory();
           this.loadChangeRecords();
           this.loadSystemStatus();
+          this.showModalComponent(
+            "success",
+            "扫描成功",
+            "文件扫描已完成，结果已更新。",
+            "bi-check-circle"
+          );
         } else {
-          alert("扫描失败: " + (data.message ? data.message : "未知错误"));
+          this.showModalComponent(
+            "error",
+            "扫描失败",
+            data.message ? data.message : "未知错误",
+            "bi-x-circle"
+          );
         }
       } catch (error) {
-        console.error("手动扫描失败:", error);
-        alert("扫描失败: 网络错误");
+        this.showModalComponent("error", "扫描失败", "网络错误", "bi-x-circle");
       } finally {
         this.scanLoading = false;
       }
@@ -283,7 +301,12 @@ new Vue({
     },
     async performSubScan() {
       if (!this.subPath.trim()) {
-        alert("请输入子路径");
+        this.showModalComponent(
+          "warning",
+          "警告",
+          "请输入子路径",
+          "bi-exclamation-triangle"
+        );
         return;
       }
 
@@ -304,19 +327,34 @@ new Vue({
           this.loadSystemStatus();
           // 自动关闭
           this.closeSubPathModal();
+          this.showModalComponent(
+            "success",
+            "扫描成功",
+            "指定路径的扫描操作已完成。",
+            "bi-check-circle"
+          );
         } else {
-          alert("扫描失败: " + (data.message ? data.message : "未知错误"));
+          this.showModalComponent(
+            "error",
+            "扫描失败",
+            data.message ? data.message : "未知错误",
+            "bi-x-circle"
+          );
         }
       } catch (err) {
-        console.error("指定路径扫描失败:", err);
-        alert("扫描失败: 网络错误");
+        this.showModalComponent("error", "扫描失败", "网络错误", "bi-x-circle");
       } finally {
         this.subScanLoading = false;
       }
     },
     async performSubRollBack() {
       if (!this.subPath.trim()) {
-        alert("请输入Season路径");
+        this.showModalComponent(
+          "warning",
+          "警告",
+          "请输入Season路径",
+          "bi-exclamation-triangle"
+        );
         return;
       }
 
@@ -335,9 +373,19 @@ new Vue({
           this.loadChangeRecords();
           this.loadSystemStatus();
           this.closeSubPathRollbackModal();
+          this.showModalComponent(
+            "success",
+            "回滚成功",
+            "指定路径的回滚操作已完成。",
+            "bi-check-circle"
+          );
         } else {
-          console.log(data);
-          alert("失败: " + (data.message ? data.message : "未知错误"));
+          this.showModalComponent(
+            "error",
+            "回滚失败",
+            data.message ? data.message : "未知错误",
+            "bi-x-circle"
+          );
         }
       } finally {
         this.subScanLoading = false;
@@ -414,11 +462,20 @@ new Vue({
           this.loadSystemStatus();
           this.loadHistory();
         } else {
-          alert("添加到白名单失败: " + result.message);
+          this.showModalComponent(
+            "error",
+            "白名单添加失败",
+            result.message || "未知错误",
+            "bi-x-circle"
+          );
         }
       } catch (error) {
-        console.error("添加白名单失败:", error);
-        alert("添加到白名单失败: 网络错误");
+        this.showModalComponent(
+          "error",
+          "白名单添加失败",
+          "添加到白名单失败: 网络错误",
+          "bi-x-circle"
+        );
       } finally {
         this.addToWhitelistLoading = false;
       }
@@ -452,11 +509,20 @@ new Vue({
           this.loadSystemStatus();
           this.loadHistory();
         } else {
-          alert("移出白名单失败: " + result.message);
+          this.showModalComponent(
+            "error",
+            "移出白名单失败",
+            result.message || "未知错误",
+            "bi-x-circle"
+          );
         }
       } catch (error) {
-        console.error("移出白名单失败:", error);
-        alert("移出白名单失败: 网络错误");
+        this.showModalComponent(
+          "error",
+          "移出白名单失败",
+          "移出白名单失败: 网络错误",
+          "bi-x-circle"
+        );
       } finally {
         this.deleteFromWhitelistLoading = false;
       }
@@ -469,7 +535,12 @@ new Vue({
         this.newWhitelistItems.some((item) => item.path === path);
 
       if (exists) {
-        alert("该路径已在白名单中");
+        this.showModalComponent(
+          "warning",
+          "警告",
+          "该路径已在白名单中",
+          "bi-x-circle"
+        );
         return;
       }
       this.newWhitelistItems.push({
@@ -509,11 +580,20 @@ new Vue({
           this.loadHistory();
           this.whi;
         } else {
-          alert("批量加入白名单失败: " + result.message);
+          this.showModalComponent(
+            "error",
+            "批量添加失败",
+            result.message || "未知错误",
+            "bi-x-circle"
+          );
         }
       } catch (err) {
-        console.error("批量加入白名单失败:", err);
-        alert("网络错误");
+        this.showModalComponent(
+          "error",
+          "批量添加失败",
+          "批量加入白名单失败: 网络错误",
+          "bi-x-circle"
+        );
       } finally {
         this.addToWhitelistLoading = false;
         this.getWhitelist();
@@ -605,7 +685,12 @@ new Vue({
           // 保存成功，关闭弹窗
           this.closeRegexModal();
           // 可选：显示成功提示
-          alert("正则配置已保存");
+          this.showModalComponent(
+            "success",
+            "保存成功",
+            "正则配置已成功保存。",
+            "bi-check-circle"
+          );
         } else {
           this.regexError = "保存失败: " + result.message;
         }
@@ -615,6 +700,41 @@ new Vue({
       } finally {
         this.regexSaving = false;
       }
+    },
+    showModalComponent(
+      type,
+      title,
+      content,
+      icon,
+      hasCancel = false,
+      callback = null
+    ) {
+      this.modalType = type;
+      this.modalTitle = title;
+      this.modalContent = content;
+      this.modalIcon = icon;
+      this.hasCancel = hasCancel;
+      this.confirmCallback = callback;
+      this.showModal = true;
+
+      // 添加活动类以触发动画
+      setTimeout(() => {
+        const modalElement = document.querySelector(".custom-modal");
+        if (modalElement) {
+          modalElement.classList.add("active");
+        }
+      }, 10);
+    },
+
+    closeModal() {
+      this.showModal = false;
+    },
+
+    confirmAction() {
+      if (this.confirmCallback && typeof this.confirmCallback === "function") {
+        this.confirmCallback();
+      }
+      this.closeModal();
     },
   },
 });

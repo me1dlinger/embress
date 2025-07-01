@@ -483,6 +483,21 @@
         </div>
       </div>
     </div>
+     <div v-if="showModal" class="custom-modal-overlay" @click.self="closeModal">
+      <div class="custom-modal" :class="'modal-' + modalType" :style="{ display: showModal ? 'block' : 'none' }">
+        <div class="custom-modal-header">
+          <i class="modal-icon bi" :class="modalIcon"></i>
+          <h5 class="modal-title">[[ modalTitle ]]</h5>
+        </div>
+        <div class="custom-modal-body">
+          <p>[[ modalContent ]]</p>
+        </div>
+        <div class="custom-modal-footer">
+          <button v-if="hasCancel" @click="closeModal" class="modal-btn modal-btn-secondary">取消</button>
+          <button @click="confirmAction" class="modal-btn modal-btn-primary">确定</button>
+        </div>
+      </div>
+    </div>
     <transition name="fade">
       <div v-if="showSubPathModal" class="modal-overlay" @click.self="closeSubPathModal"
         @keydown.esc="closeSubPathModal" tabindex="0">
