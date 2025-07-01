@@ -329,6 +329,11 @@ class ConfigDB:
                 pass
         return history
 
+    def get_scan_history_count(self):
+        conn, cursor = self._get_connection()
+        cursor.execute("SELECT count(*) FROM scan_history;")
+        return cursor.fetchone()[0]
+
     def get_last_scan_result(self):
         conn, cursor = self._get_connection()
         cursor.execute("SELECT data FROM scan_history ORDER BY timestamp DESC LIMIT 1;")

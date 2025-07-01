@@ -81,7 +81,7 @@ def get_status():
             "scan_interval": SCAN_INTERVAL,
             "last_scan": config_db.get_last_scan_result(),
             "scheduler_running": scheduler.running,
-            "total_scans": len(config_db.get_scan_history()),
+            "total_scans": config_db.get_scan_history_count(),
             "total_whitelist": len(config_db.get_whitelist()),
         }
     )
