@@ -610,7 +610,11 @@ class EmbressRenamer:
         )
         if self._pending_change_records:
             try:
+                self.logger.info(f"开始保存记录")
                 config_db.add_change_records(self._pending_change_records)
+                self.logger.info("保存成功")
+                self._pending_change_records = []
+                self._seasons_to_update = set()
             except Exception as e:
                 self.logger.error("批量保存变更记录失败: %s", e)
             for season_dir in self._seasons_to_update:
@@ -632,6 +636,7 @@ class EmbressRenamer:
     ):
         if not changes:
             return
+
         processed = self._get_new_change_record(season_dir, media_type, changes)
         self._pending_change_records.extend(processed)
         self._seasons_to_update.add(season_dir)

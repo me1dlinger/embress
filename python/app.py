@@ -476,8 +476,8 @@ def init_change_record():
                         except Exception as e:
                             app.logger.error(f"读取变更记录失败 {record_file}: {e}")
             if all_records:
-                config_db.add_change_records(all_records)
                 app.logger.info(f"共读取 {len(all_records)} 条记录到 change_record 表")
+                config_db.add_change_records(all_records)
             else:
                 app.logger.info("未发现可读取记录")
             app.logger.info("change_record 表初始化成功")

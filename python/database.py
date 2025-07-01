@@ -348,7 +348,8 @@ class ConfigDB:
             original = record.get("original")
             record_type = record.get("type")
             season_dir = record.get("season_dir")
-            if self.record_exists(path, original, record_type):
+            status = record.get("status")
+            if self.record_exists(path, original, record_type, status):
                 updates = {
                     "new": record.get("new"),
                     "status": record.get("status"),
@@ -356,9 +357,13 @@ class ConfigDB:
                     "timestamp": datetime.now().isoformat(),
                     "rollback": record.get("rollback", 0),
                 }
-                updates = {k: v for k, v in updates.items() if v is not None}
-                if updates:
-                    self.update_existing_record(path, original, record_type, **updates)
+
+                if record.get("status") != "skip":
+                    updates = {k: v for k, v in updates.items() if v is not None}
+                    if updates:
+                        self.update_existing_record(
+                            path, original, record_type, **updates
+                        )
             else:
                 cursor.execute(
                     """
@@ -420,12 +425,14 @@ class ConfigDB:
 
         return records
 
-    def record_exists(self, path: str, original: str, record_type: str) -> bool:
+    def record_exists(
+        self, path: str, original: str, record_type: str, status: str
+    ) -> bool:
         """检查记录是否已存在"""
         conn, cursor = self._get_connection()
         cursor.execute(
-            "SELECT COUNT(*) FROM change_record WHERE path = ? AND original = ? AND type = ?",
-            (path, original, record_type),
+            "SELECT COUNT(*) FROM change_record WHERE path = ? AND original = ? AND type = ? AND status = ?",
+            (path, original, record_type, status),
         )
         return cursor.fetchone()[0] > 0
 
