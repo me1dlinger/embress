@@ -139,27 +139,24 @@ def scan_directory():
 def rollback_season():
     data = request.get_json(silent=True) or {}
     sub_path = data.get("sub_path")
+    app.logger.info(f"开始回滚季: {sub_path}")
     if not sub_path:
         return jsonify({"success": False, "message": "缺少 sub_path"}), 400
-
     season_dir = Path(MEDIA_PATH) / sub_path
-    rename_record_path = season_dir / "rename_record.json"
     rollback_record_path = season_dir / "rollback.json"
-
+    media_type = renamer._extract_media_type(season_dir)
     if not season_dir.exists():
-        return jsonify({"success": False, "message": "Season 目录不存在"}), 404
-    if not rename_record_path.exists():
-        return jsonify({"success": False, "message": "未找到 rename_record.json"}), 404
-
+        return jsonify({"success": False, "message": "Season 目录不存在"}), 200
     try:
-        original_records = json.loads(rename_record_path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        app.logger.exception("读取变更记录失败")
-        return jsonify({"success": False, "message": f"读取记录失败: {exc}"}), 500
+        original_records = config_db.get_season_change_records(str(season_dir))
+    except Exception as e:
+        app.logger.error(f"获取变更记录失败: {e}")
+        return jsonify({"records": [], "total": 0, "error": str(e)}), 500
 
     rollback_results = []
     rolled_back_cnt = 0
     original_records = _dedup_latest(original_records)
+    nfo_changes = []
     for rec in original_records:
         if (
             rec.get("type") != "rename"
@@ -168,7 +165,6 @@ def rollback_season():
         ):
             continue
         cur_path = Path(rec["path"])
-
         original_name = rec["original"]
         if not cur_path.exists():
             rollback_results.append(
@@ -187,6 +183,7 @@ def rollback_season():
             changes = renamer._rollback_file_and_subtitles(
                 cur_path, original_name, original_records
             )
+
             if renamer._count_success_renames(changes):
                 rolled_back_cnt += 1
                 rollback_result = {
@@ -199,6 +196,9 @@ def rollback_season():
                 }
                 rollback_results.append(rollback_result)
                 rec["rollback"] = True
+                config_db.update_change_record_rollback(
+                    rec["path"], rec["original"], True
+                )
                 for change in changes:
                     if (
                         change.get("type") == "subtitle_rename"
@@ -214,6 +214,15 @@ def rollback_season():
                             "path": str((cur_path.parent / change["new"]).absolute()),
                         }
                         rollback_results.append(rollback_result)
+                        subtitle_path = str(
+                            (cur_path.parent / change["original"]).absolute()
+                        )
+                        config_db.update_change_record_rollback(
+                            subtitle_path, change["new"], True
+                        )
+                nfo_changes = renamer._delete_old_nfo(
+                    season_dir, Path(rec["new"]).stem, nfo_changes
+                )
             else:
                 rollback_results.append(
                     {
@@ -240,9 +249,14 @@ def rollback_season():
                 }
             )
     try:
-        rename_record_path.write_text(
-            json.dumps(original_records, ensure_ascii=False, indent=2), encoding="utf-8"
+        nfo_delete_records = renamer._get_new_change_record(
+            season_dir, media_type, nfo_changes
         )
+        try:
+            config_db.add_change_records(nfo_delete_records, str(season_dir))
+        except Exception as e:
+            app.logger.error(f"保存删除记录到数据库失败: {e}")
+        renamer._write_all_change_records(season_dir)
     except Exception as exc:
         app.logger.exception("更新 rename_record.json 标记失败")
     if rollback_results:
@@ -356,43 +370,12 @@ def delete_from_whitelist():
 
 @app.route("/api/change-records")
 def get_change_records():
-    records = []
-    media_path = Path(MEDIA_PATH)
-
-    if not media_path.exists():
-        return jsonify({"records": [], "total": 0})
-
-    for media_type_dir in media_path.iterdir():
-        if not media_type_dir.is_dir():
-            continue
-
-        for show_dir in media_type_dir.iterdir():
-            if not show_dir.is_dir():
-                continue
-
-            for season_dir in show_dir.iterdir():
-                if not season_dir.is_dir():
-                    continue
-                record_file = season_dir / "rename_record.json"
-                if not record_file.exists():
-                    continue
-                try:
-                    season_records = json.loads(record_file.read_text(encoding="utf-8"))
-                    for rec in season_records:
-                        if rec.get("status") == "success":
-                            rec.update(
-                                media_type=media_type_dir.name,
-                                show=show_dir.name,
-                                season=season_dir.name,
-                                rollback=rec.get("rollback", False),
-                            )
-                            records.append(rec)
-
-                except Exception as e:
-                    app.logger.error(f"读取变更记录失败 {record_file}: {e}")
-
-    records.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
-    return jsonify({"records": records[:200], "total": len(records)})
+    try:
+        records = config_db.get_change_records(limit=200)
+        return jsonify({"records": records, "total": len(records)})
+    except Exception as e:
+        app.logger.error(f"获取变更记录失败: {e}")
+        return jsonify({"records": [], "total": 0, "error": str(e)}), 500
 
 
 @app.route("/api/logs")

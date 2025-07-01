@@ -11,6 +11,7 @@ import sqlite3
 import threading
 from pathlib import Path
 from datetime import datetime
+from typing import Dict, List
 
 CONFIG_DB_PATH = os.getenv("CONFIG_DB_PATH", "data/conf/config.db")
 
@@ -113,7 +114,35 @@ class ConfigDB:
             );
         """
         )
-
+        # 添加 change_record 表
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS change_record (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                path TEXT NOT NULL,
+                original TEXT NOT NULL,
+                new TEXT,
+                type TEXT NOT NULL,
+                status TEXT NOT NULL,
+                error TEXT,
+                timestamp TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                media_type TEXT,
+                show_name TEXT,
+                season_name TEXT,
+                rollback INTEGER DEFAULT 0,
+                season_dir TEXT NOT NULL
+            );
+        """
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_change_record_season_dir ON change_record(season_dir);"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_change_record_timestamp ON change_record(timestamp DESC);"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_change_record_path ON change_record(path);"
+        )
         cursor.execute("SELECT COUNT(*) FROM regex_config;")
         if cursor.fetchone()[0] == 0:
             for p_type, patterns in DEFAULT_REGEX.items():
@@ -271,6 +300,160 @@ class ConfigDB:
             except json.JSONDecodeError:
                 pass
         return None
+
+    def add_change_records(self, records: List[Dict], season_dir: str):
+        """批量添加变更记录到数据库，避免重复"""
+        conn, cursor = self._get_connection()
+        for record in records:
+            path = record.get("path")
+            original = record.get("original")
+            record_type = record.get("type")
+            if self.record_exists(path, original, record_type):
+                updates = {
+                    "new": record.get("new"),
+                    "status": record.get("status"),
+                    "error": record.get("error"),
+                    "timestamp": record.get("timestamp"),
+                    "rollback": record.get("rollback", 0),
+                }
+                updates = {k: v for k, v in updates.items() if v is not None}
+                if updates:
+                    self.update_existing_record(path, original, record_type, **updates)
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO change_record 
+                    (path, original, new, type, status, error, timestamp, media_type, 
+                    show_name, season_name, rollback, season_dir)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        path,
+                        original,
+                        record.get("new"),
+                        record_type,
+                        record.get("status"),
+                        record.get("error"),
+                        record.get("timestamp"),
+                        record.get("media_type"),
+                        record.get("show_name"),
+                        record.get("season_name"),
+                        1 if record.get("rollback") else 0,
+                        season_dir,
+                    ),
+                )
+        conn.commit()
+
+    def get_change_records(self, limit: int = 200) -> List[Dict]:
+        """从数据库获取变更记录"""
+        conn, cursor = self._get_connection()
+        cursor.execute(
+            """
+            SELECT path, original, new, type, status, error, timestamp, 
+                media_type, show_name, season_name, rollback, season_dir
+            FROM change_record 
+            WHERE status = 'success'
+            ORDER BY timestamp DESC 
+            LIMIT ?
+            """,
+            (limit,),
+        )
+
+        records = []
+        for row in cursor.fetchall():
+            records.append(
+                {
+                    "path": row[0],
+                    "original": row[1],
+                    "new": row[2],
+                    "type": row[3],
+                    "status": row[4],
+                    "error": row[5],
+                    "timestamp": row[6],
+                    "media_type": row[7],
+                    "show": row[8],
+                    "season": row[9],
+                    "rollback": bool(row[10]),
+                    "season_dir": row[11],
+                }
+            )
+
+        return records
+
+    def record_exists(self, path: str, original: str, record_type: str) -> bool:
+        """检查记录是否已存在"""
+        conn, cursor = self._get_connection()
+        cursor.execute(
+            "SELECT COUNT(*) FROM change_record WHERE path = ? AND original = ? AND type = ?",
+            (path, original, record_type),
+        )
+        return cursor.fetchone()[0] > 0
+
+    def update_existing_record(
+        self, path: str, original: str, record_type: str, **updates
+    ):
+        """更新现有记录"""
+        conn, cursor = self._get_connection()
+        update_fields = []
+        values = []
+        for field, value in updates.items():
+            if field in ["new", "status", "error", "timestamp", "rollback"]:
+                update_fields.append(f"{field} = ?")
+                if field == "rollback":
+                    values.append(1 if value else 0)
+                else:
+                    values.append(value)
+
+        if not update_fields:
+            return
+
+        values.extend([path, original, record_type])
+        cursor.execute(
+            f"UPDATE change_record SET {', '.join(update_fields)} WHERE path = ? AND original = ? AND type = ?",
+            values,
+        )
+        conn.commit()
+
+    def update_change_record_rollback(
+        self, path: str, original: str, rollback: bool = True
+    ):
+        conn, cursor = self._get_connection()
+        cursor.execute(
+            "UPDATE change_record SET rollback = ? WHERE path = ? AND original = ?",
+            (1 if rollback else 0, path, original),
+        )
+        conn.commit()
+
+    def get_season_change_records(self, season_dir: str) -> List[Dict]:
+        conn, cursor = self._get_connection()
+        cursor.execute(
+            """
+            SELECT path, original, new, type, status, error, timestamp, 
+                media_type, rollback
+            FROM change_record 
+            WHERE season_dir = ?
+            ORDER BY timestamp DESC
+            """,
+            (season_dir,),
+        )
+
+        records = []
+        for row in cursor.fetchall():
+            records.append(
+                {
+                    "path": row[0],
+                    "original": row[1],
+                    "new": row[2],
+                    "type": row[3],
+                    "status": row[4],
+                    "error": row[5],
+                    "timestamp": row[6],
+                    "media_type": row[7],
+                    "rollback": bool(row[8]),
+                }
+            )
+
+        return records
 
     def close(self):
         if hasattr(self._local, "conn"):

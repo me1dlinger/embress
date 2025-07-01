@@ -313,6 +313,7 @@ class EmbressRenamer:
                         "original": file_path.name,
                         "new": new_name,
                         "status": "success",
+                        "error": None,
                     }
                 )
             except Exception as e:
@@ -348,6 +349,7 @@ class EmbressRenamer:
                         "original": sub.name,
                         "new": new_sub_name,
                         "status": "success",
+                        "error": None,
                     }
                 )
             except Exception as e:
@@ -360,44 +362,17 @@ class EmbressRenamer:
                         "error": str(e),
                     }
                 )
-
-        nfo_path = file_path.parent / f"{old_stem}.nfo"
-        for candidate in [nfo_path, nfo_path.with_suffix(".NFO")]:
-            if candidate.exists():
-                try:
-                    candidate.unlink()
-                    changes.append(
-                        {
-                            "type": "nfo_delete",
-                            "original": candidate.name,
-                            "status": "success",
-                        }
-                    )
-                except Exception as e:
-                    changes.append(
-                        {
-                            "type": "nfo_delete",
-                            "original": candidate.name,
-                            "status": "failed",
-                            "error": str(e),
-                        }
-                    )
-
+        changes = self._delete_old_nfo(file_path.parent, old_stem, changes)
         return changes
 
     def _sync_orphan_subtitles(self, season_dir: Path) -> List[Dict]:
-        record_file = season_dir / "rename_record.json"
-        if not record_file.exists():
-            return []
-
-        # --- 读取并提取映射 ---------------------------------------------------
         try:
-            records = json.loads(record_file.read_text("utf-8"))
-        except Exception:
-            self.logger.warning("读取 rename_record.json 失败: %s", record_file)
+            records = config_db.get_season_change_records(str(season_dir))
+        except Exception as e:
+            self.logger.warning("从数据库获取变更记录失败: %s", e)
             return []
 
-        latest_map: Dict[str, Tuple[str, str]] = {}  # original -> (latest_new, ts)
+        latest_map: Dict[str, Tuple[str, str]] = {}
         for r in records:
             if r.get("type") != "rename" or r.get("status") != "success":
                 continue
@@ -448,114 +423,84 @@ class EmbressRenamer:
                                     "error": str(e),
                                 }
                             )
-
-                # 2) NFO 删除
-                if item.suffix.lower() in {".nfo", ".NFO"} and item.stem == orig_stem:
-                    try:
-                        item.unlink()
-                        changes.append(
-                            {
-                                "type": "nfo_delete",
-                                "original": item.name,
-                                "status": "success",
-                            }
-                        )
-                        self.logger.info("删除残留 NFO 文件: %s", item.name)
-                    except Exception as e:
-                        changes.append(
-                            {
-                                "type": "nfo_delete",
-                                "original": item.name,
-                                "status": "failed",
-                                "error": str(e),
-                            }
-                        )
-
+            # 2) NFO 删除
+            changes = self._delete_old_nfo(season_dir, orig_stem, changes)
         return changes
 
-    def _save_change_record(
+    def _get_new_change_record(
         self, season_dir: Path, media_type: str, changes: List[Dict]
     ):
-        """合并写入 rename_record.json，兼容旧记录无 path 的情况"""
-        record_file = season_dir / "rename_record.json"
-        existing: List[Dict] = []
-
-        if record_file.exists():
-            try:
-                existing = json.loads(record_file.read_text("utf-8"))
-            except Exception:
-                self.logger.warning(f"读取历史记录失败: {record_file}")
-
-        existing_updated = False
-        for item in existing:
-            if "path" not in item:
-                item["path"] = str(
-                    (season_dir / item.get("new", item.get("original", ""))).absolute()
-                )
-                existing_updated = True
-
-        if existing_updated:
-            try:
-                record_file.write_text(
-                    json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8"
-                )
-            except Exception:
-                pass
+        processed_changes = []
         for c in changes:
             c["timestamp"] = datetime.datetime.now().isoformat()
             c["media_type"] = media_type
             c["path"] = str(
                 (season_dir / c.get("new", c.get("original", ""))).absolute()
             )
+            try:
+                relative_path = season_dir.relative_to(self.media_path)
+                parts = relative_path.parts
+                if len(parts) >= 2:
+                    c["show_name"] = parts[-2]  # 倒数第二个是show
+                    c["season_name"] = parts[-1]  # 最后一个是season
+            except ValueError:
+                c["show_name"] = season_dir.parent.name
+                c["season_name"] = season_dir.name
 
-        merged: Dict[Tuple[str, str], Dict] = {
-            (item["path"], item.get("original", "")): item for item in existing
-        }
+            processed_changes.append(c)
+        return processed_changes
+
+    def _save_change_record(
+        self, season_dir: Path, media_type: str, changes: List[Dict]
+    ):
+        processed_changes = []
         for c in changes:
-            key = (c["path"], c.get("original", ""))
-            if (
-                key in merged
-                and c["status"] == "skip"
-                and merged[key]["status"] != "skip"
-            ):
-                continue
-            merged[key] = c
+            c["timestamp"] = datetime.datetime.now().isoformat()
+            c["media_type"] = media_type
+            c["path"] = str(
+                (season_dir / c.get("new", c.get("original", ""))).absolute()
+            )
+            try:
+                relative_path = season_dir.relative_to(self.media_path)
+                parts = relative_path.parts
+                if len(parts) >= 2:
+                    c["show_name"] = parts[-2]  # 倒数第二个是show
+                    c["season_name"] = parts[-1]  # 最后一个是season
+            except ValueError:
+                c["show_name"] = season_dir.parent.name
+                c["season_name"] = season_dir.name
 
-        record_file.write_text(
-            json.dumps(list(merged.values()), ensure_ascii=False, indent=2),
-            encoding="utf-8",
+            processed_changes.append(c)
+        try:
+            config_db.add_change_records(processed_changes, str(season_dir))
+        except Exception as e:
+            self.logger.error(f"保存变更记录到数据库失败: {e}")
+        self._write_all_change_records(season_dir)
+
+    def _write_all_change_records(self, season_dir):
+        rename_record_path = season_dir / "rename_record.json"
+        try:
+            new_records = config_db.get_season_change_records(str(season_dir))
+        except Exception as e:
+            self.logger.error(f"获取变更记录失败: {e}")
+        rename_record_path.write_text(
+            json.dumps(new_records, ensure_ascii=False, indent=2), encoding="utf-8"
         )
 
     def _season_processed_set(self, season_dir: Path) -> Set[Tuple[str, str]]:
-        rec_file = season_dir / "rename_record.json"
-        if not rec_file.exists():
-            return set()
-
+        """从数据库获取已处理的文件集合"""
         try:
-            data = json.loads(rec_file.read_text("utf-8"))
-        except Exception:
+            records = config_db.get_season_change_records(str(season_dir))
+            processed: Set[Tuple[str, str]] = set()
+
+            for record in records:
+                if record.get("status") == "success":
+                    processed.add((record["path"], record.get("new", "")))
+
+            return processed
+        except Exception as e:
+            self.logger.error(f"从数据库获取已处理文件失败: {e}")
             return set()
-
-        processed: Set[Tuple[str, str]] = set()
-        updated = False
-
-        for item in data:
-            if "path" not in item:
-                derived = str(
-                    (season_dir / item.get("new", item.get("original", ""))).absolute()
-                )
-                item["path"] = derived
-                updated = True
-            processed.add((item["path"], item.get("new", "")))
-        if updated:
-            try:
-                rec_file.write_text(
-                    json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-                )
-            except Exception:
-                pass
-
-        return processed
 
     @staticmethod
     def _count_success_renames(changes: List[Dict]) -> int:
@@ -698,6 +643,32 @@ class EmbressRenamer:
             "timestamp": datetime.datetime.now().isoformat(),
             "target": str(sub_path or "ALL"),
         }
+
+    def _delete_old_nfo(self, season_dir, old_stem, changes):
+        nfo_path = season_dir / f"{old_stem}.nfo"
+        for candidate in [nfo_path, nfo_path.with_suffix(".NFO")]:
+            if candidate.exists():
+                try:
+                    candidate.unlink()
+                    changes.append(
+                        {
+                            "type": "nfo_delete",
+                            "original": candidate.name,
+                            "status": "success",
+                            "error": None,
+                        }
+                    )
+                except Exception as e:
+                    changes.append(
+                        {
+                            "type": "nfo_delete",
+                            "original": candidate.name,
+                            "status": "failed",
+                            "error": str(e),
+                        }
+                    )
+
+        return changes
 
     def _extract_media_type(self, any_path: Path) -> str:
         try:
