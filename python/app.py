@@ -10,11 +10,11 @@ import json
 import logging
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
-import datetime
 from flask import Flask, render_template, request, jsonify
 from apscheduler.schedulers.background import BackgroundScheduler
 from embress_renamer import EmbressRenamer, WhitelistLoader
 from database import config_db
+from datetime import datetime, timedelta
 
 
 LOGS_PATH = Path(os.getenv("LOG_PATH", "./data/logs"))
@@ -43,7 +43,7 @@ def scheduled_scan() -> None:
         error_result = {
             "status": "error",
             "message": str(exc),
-            "timestamp": datetime.datetime.now().isoformat(),
+            "timestamp": datetime.now().isoformat(),
         }
         config_db.add_scan_history(error_result)
 
@@ -106,7 +106,7 @@ def manual_scan():
         error_result = {
             "status": "error",
             "message": str(exc),
-            "timestamp": datetime.datetime.now().isoformat(),
+            "timestamp": datetime.now().isoformat(),
         }
         config_db.add_scan_history(error_result)
         return jsonify({"success": False, "result": error_result}), 500
@@ -171,7 +171,7 @@ def rollback_season():
                     "new": original_name,
                     "status": "failed",
                     "error": "文件不存在",
-                    "timestamp": datetime.datetime.now().isoformat(),
+                    "timestamp": datetime.now().isoformat(),
                     "path": rec["path"],
                 }
             )
@@ -188,7 +188,7 @@ def rollback_season():
                     "original": rec["new"],
                     "new": original_name,
                     "status": "rolled_back",
-                    "timestamp": datetime.datetime.now().isoformat(),
+                    "timestamp": datetime.now().isoformat(),
                     "path": str((cur_path.parent / original_name).absolute()),
                 }
                 rollback_results.append(rollback_result)
@@ -207,7 +207,7 @@ def rollback_season():
                             "original": change["original"],
                             "new": change["new"],
                             "status": "rolled_back",
-                            "timestamp": datetime.datetime.now().isoformat(),
+                            "timestamp": datetime.now().isoformat(),
                             "path": str((cur_path.parent / change["new"]).absolute()),
                         }
                         rollback_results.append(rollback_result)
@@ -228,7 +228,7 @@ def rollback_season():
                         "new": original_name,
                         "status": "failed",
                         "error": "重命名失败",
-                        "timestamp": datetime.datetime.now().isoformat(),
+                        "timestamp": datetime.now().isoformat(),
                         "path": rec["path"],
                     }
                 )
@@ -241,7 +241,7 @@ def rollback_season():
                     "new": original_name,
                     "status": "failed",
                     "error": str(exc),
-                    "timestamp": datetime.datetime.now().isoformat(),
+                    "timestamp": datetime.now().isoformat(),
                     "path": rec["path"],
                 }
             )
@@ -269,7 +269,7 @@ def rollback_season():
             "renamed": rolled_back_file_cnt,
             "renamed_subtitle": rolled_back_sub_cnt,
             "deleted_nfo": len(nfo_delete_records),
-            "timestamp": datetime.datetime.now().isoformat(),
+            "timestamp": datetime.now().isoformat(),
             "target": sub_path,
             "scan_type": "rollback",
         }
@@ -403,7 +403,7 @@ def get_logs():
             {
                 "name": log_file.name,
                 "size": stat.st_size,
-                "modified": datetime.datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
             }
         )
     return jsonify({"logs": logs})
@@ -432,7 +432,7 @@ def setup_logging() -> None:
         return
 
     LOGS_PATH.mkdir(parents=True, exist_ok=True)
-    log_file = LOGS_PATH / f"app_{datetime.datetime.now():%Y%m%d}.log"
+    log_file = LOGS_PATH / f"app_{datetime.now():%Y%m%d}.log"
 
     file_handler = RotatingFileHandler(
         log_file, maxBytes=10 * 1024 * 1024, backupCount=7, encoding="utf-8"
@@ -503,6 +503,17 @@ def init_change_record():
         raise RuntimeError("无法初始化 change_record 表") from exc
 
 
+def get_aligned_start(interval_seconds: int) -> datetime:
+    now = datetime.now()
+    anchor = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    elapsed = (now - anchor).total_seconds()
+    next_interval_index = int(elapsed // interval_seconds) + 1
+    aligned_seconds = next_interval_index * interval_seconds
+    aligned_time = anchor + timedelta(seconds=aligned_seconds)
+
+    return aligned_time
+
+
 if __name__ == "__main__":
     setup_logging()
     init_change_record()
@@ -510,12 +521,15 @@ if __name__ == "__main__":
         scheduler.add_job(
             func=scheduled_scan,
             trigger="interval",
-            seconds=SCAN_INTERVAL,
+            seconds=600,
             id="scan_job",
             name="文件扫描任务",
+            start_date=get_aligned_start(SCAN_INTERVAL),
             replace_existing=True,
         )
         scheduler.start()
-        app.logger.info(f"定时任务已启动，扫描间隔: {SCAN_INTERVAL} 秒")
+        app.logger.info(
+            f"定时任务已启动，扫描间隔: {SCAN_INTERVAL} 秒，首执行时间: {get_aligned_start(SCAN_INTERVAL)}"
+        )
     port = int(os.getenv("FLASK_PORT", 15000))
     app.run(host="0.0.0.0", port=port, debug=False)

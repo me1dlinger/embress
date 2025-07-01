@@ -276,10 +276,8 @@ class EmbressRenamer:
                             record.get("type") == "subtitle_rename"
                             and record.get("status") == "success"
                             and record.get("rollback") is not True
-                            and record.get("new")
-                            == sub.name
-                            and record.get("original")
-                            == new_sub_name
+                            and record.get("new") == sub.name
+                            and record.get("original") == new_sub_name
                         ):
                             record["rollback"] = True
                             break
