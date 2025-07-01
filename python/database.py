@@ -114,35 +114,6 @@ class ConfigDB:
             );
         """
         )
-        # 添加 change_record 表
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS change_record (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                path TEXT NOT NULL,
-                original TEXT NOT NULL,
-                new TEXT,
-                type TEXT NOT NULL,
-                status TEXT NOT NULL,
-                error TEXT,
-                timestamp TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                media_type TEXT,
-                show_name TEXT,
-                season_name TEXT,
-                rollback INTEGER DEFAULT 0,
-                season_dir TEXT NOT NULL
-            );
-        """
-        )
-        cursor.execute(
-            "CREATE INDEX IF NOT EXISTS idx_change_record_season_dir ON change_record(season_dir);"
-        )
-        cursor.execute(
-            "CREATE INDEX IF NOT EXISTS idx_change_record_timestamp ON change_record(timestamp DESC);"
-        )
-        cursor.execute(
-            "CREATE INDEX IF NOT EXISTS idx_change_record_path ON change_record(path);"
-        )
         cursor.execute("SELECT COUNT(*) FROM regex_config;")
         if cursor.fetchone()[0] == 0:
             for p_type, patterns in DEFAULT_REGEX.items():
@@ -158,6 +129,56 @@ class ConfigDB:
             "scan_history", "renamed_subtitle INTEGER DEFAULT 0"
         )
         self._add_column_if_missing("scan_history", "deleted_nfo INTEGER DEFAULT 0")
+
+    def _init_change_record_table(self):
+        conn, cursor = self._get_connection()
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='change_record';"
+        )
+        change_record_exists = cursor.fetchone() is not None
+        if not change_record_exists:
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS change_record (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    path TEXT NOT NULL,
+                    original TEXT NOT NULL,
+                    new TEXT,
+                    type TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    error TEXT,
+                    timestamp TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    media_type TEXT,
+                    show_name TEXT,
+                    season_name TEXT,
+                    rollback INTEGER DEFAULT 0,
+                    season_dir TEXT NOT NULL
+                );
+                """
+            )
+
+            # 创建索引
+            cursor.execute(
+                "CREATE INDEX idx_change_record_season_dir ON change_record(season_dir);"
+            )
+            cursor.execute(
+                "CREATE INDEX idx_change_record_timestamp ON change_record(timestamp DESC);"
+            )
+            cursor.execute(
+                "CREATE INDEX idx_change_record_path ON change_record(path);"
+            )
+            return False
+        else:
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_change_record_season_dir ON change_record(season_dir);"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_change_record_timestamp ON change_record(timestamp DESC);"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_change_record_path ON change_record(path);"
+            )
+            return True
 
     def _add_column_if_missing(self, table: str, column_def: str):
         conn, cursor = self._get_connection()

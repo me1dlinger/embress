@@ -428,12 +428,62 @@ def setup_logging() -> None:
 
     if not any(isinstance(h, RotatingFileHandler) for h in root_logger.handlers):
         root_logger.addHandler(file_handler)
-    app.logger.handlers = root_logger.handlers
-    app.logger.setLevel(root_logger.level)
+
+
+def init_change_record():
+    try:
+        if config_db._init_change_record_table():
+            app.logger.info("change_record 表已存在，跳过初始化")
+        else:
+            app.logger.info("change_record 表不存在，创建表并迁移历史数据")
+
+            media_path = Path(MEDIA_PATH)
+            if not media_path.exists():
+                app.logger.warning(f"媒体路径不存在: {MEDIA_PATH}")
+                return
+            for media_type_dir in media_path.iterdir():
+                if not media_type_dir.is_dir():
+                    continue
+
+                for show_dir in media_type_dir.iterdir():
+                    if not show_dir.is_dir():
+                        continue
+                    for season_dir in show_dir.iterdir():
+                        records = []
+                        if not season_dir.is_dir():
+                            continue
+                        record_file = season_dir / "rename_record.json"
+                        if not record_file.exists():
+                            continue
+                        try:
+                            season_records = json.loads(
+                                record_file.read_text(encoding="utf-8")
+                            )
+                            for rec in season_records:
+                                if (
+                                    rec.get("show_name") == None
+                                    or rec.get("season_name") is None
+                                    or rec.get("media_type") is None
+                                ):
+                                    rec["show_name"] = show_dir.name
+                                    rec["season_name"] = season_dir.name
+                                    rec["media_type"] = media_type_dir.name
+                            records.extend(season_records)
+                        except Exception as e:
+                            app.logger.error(f"读取变更记录失败 {record_file}: {e}")
+                        config_db.add_change_records(records, str(season_dir))
+                        app.logger.info(
+                            f"已迁移 {len(records)} 条记录到 change_record 表"
+                        )
+            app.logger.info("change_record 表初始化成功")
+    except Exception as exc:
+        app.logger.error(f"初始化 change_record 表失败: {exc}")
+        raise RuntimeError("无法初始化 change_record 表") from exc
 
 
 if __name__ == "__main__":
     setup_logging()
+    init_change_record()
     if not scheduler.running:
         scheduler.add_job(
             func=scheduled_scan,
