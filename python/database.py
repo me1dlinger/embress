@@ -256,7 +256,7 @@ class ConfigDB:
         for item in items:
             path = item.get("path")
             item_type = item.get("type", "file")
-            ts = item.get("timestamp") or datetime.utcnow().isoformat()
+            ts = item.get("timestamp") or datetime.now().isoformat()
 
             if not path:
                 failed.append({"path": None, "error": "path 为空"})
@@ -350,19 +350,20 @@ class ConfigDB:
                 pass
         return None
 
-    def add_change_records(self, records: List[Dict], season_dir: str):
+    def add_change_records(self, records: List[Dict]):
         """批量添加变更记录到数据库，避免重复"""
         conn, cursor = self._get_connection()
         for record in records:
             path = record.get("path")
             original = record.get("original")
             record_type = record.get("type")
+            season_dir = record.get("season_dir")
             if self.record_exists(path, original, record_type):
                 updates = {
                     "new": record.get("new"),
                     "status": record.get("status"),
                     "error": record.get("error"),
-                    "timestamp": record.get("timestamp"),
+                    "timestamp": datetime.now().isoformat(),
                     "rollback": record.get("rollback", 0),
                 }
                 updates = {k: v for k, v in updates.items() if v is not None}

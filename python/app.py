@@ -249,7 +249,7 @@ def rollback_season():
             season_dir, media_type, nfo_changes
         )
         try:
-            config_db.add_change_records(nfo_delete_records, str(season_dir))
+            config_db.add_change_records(nfo_delete_records)
         except Exception as e:
             app.logger.error(f"保存删除记录到数据库失败: {e}")
         renamer._write_all_change_records(season_dir)
@@ -442,15 +442,14 @@ def init_change_record():
             if not media_path.exists():
                 app.logger.warning(f"媒体路径不存在: {MEDIA_PATH}")
                 return
+            all_records = []
             for media_type_dir in media_path.iterdir():
                 if not media_type_dir.is_dir():
                     continue
-
                 for show_dir in media_type_dir.iterdir():
                     if not show_dir.is_dir():
                         continue
                     for season_dir in show_dir.iterdir():
-                        records = []
                         if not season_dir.is_dir():
                             continue
                         record_file = season_dir / "rename_record.json"
@@ -469,13 +468,18 @@ def init_change_record():
                                     rec["show_name"] = show_dir.name
                                     rec["season_name"] = season_dir.name
                                     rec["media_type"] = media_type_dir.name
-                            records.extend(season_records)
+                                    rec["season_dir"] = str(season_dir)
+                            all_records.extend(season_records)
+                            app.logger.info(
+                                f"从 {record_file} 读取 {len(season_records)} 条记录"
+                            )
                         except Exception as e:
                             app.logger.error(f"读取变更记录失败 {record_file}: {e}")
-                        config_db.add_change_records(records, str(season_dir))
-                        app.logger.info(
-                            f"已迁移 {len(records)} 条记录到 change_record 表"
-                        )
+            if all_records:
+                config_db.add_change_records(all_records)
+                app.logger.info(f"共读取 {len(all_records)} 条记录到 change_record 表")
+            else:
+                app.logger.info("未发现可读取记录")
             app.logger.info("change_record 表初始化成功")
     except Exception as exc:
         app.logger.error(f"初始化 change_record 表失败: {exc}")

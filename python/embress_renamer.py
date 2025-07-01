@@ -439,12 +439,13 @@ class EmbressRenamer:
             c["path"] = str(
                 (season_dir / c.get("new", c.get("original", ""))).absolute()
             )
+            c["season_dir"] = str(season_dir)
             try:
                 relative_path = season_dir.relative_to(self.media_path)
                 parts = relative_path.parts
                 if len(parts) >= 2:
-                    c["show_name"] = parts[-2]  # 倒数第二个是show
-                    c["season_name"] = parts[-1]  # 最后一个是season
+                    c["show_name"] = parts[-2]
+                    c["season_name"] = parts[-1]
             except ValueError:
                 c["show_name"] = season_dir.parent.name
                 c["season_name"] = season_dir.name
