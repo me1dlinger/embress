@@ -312,25 +312,15 @@ class ConfigDB:
                 ),
             )
             conn.commit()
-
-            cursor.execute(
-                """
-                DELETE FROM scan_history
-                WHERE id NOT IN (
-                    SELECT id FROM scan_history
-                    ORDER BY timestamp DESC
-                    LIMIT 50
-                );
-            """
-            )
-            conn.commit()
         except Exception as e:
             conn.rollback()
             raise sqlite3.OperationalError(f"添加扫描历史失败: {e}")
 
     def get_scan_history(self):
         conn, cursor = self._get_connection()
-        cursor.execute("SELECT data FROM scan_history ORDER BY timestamp DESC;")
+        cursor.execute(
+            "SELECT data FROM scan_history ORDER BY timestamp DESC LIMIT 50;"
+        )
         history = []
         for (row,) in cursor.fetchall():
             try:
