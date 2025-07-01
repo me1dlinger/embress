@@ -181,9 +181,7 @@ new Vue({
           this.loadChangeRecords();
           this.loadSystemStatus();
         } else {
-          alert(
-            "扫描失败: " + (data.result ? data.result.message : "未知错误")
-          );
+          alert("扫描失败: " + (data.message ? data.message : "未知错误"));
         }
       } catch (error) {
         console.error("手动扫描失败:", error);
@@ -307,9 +305,7 @@ new Vue({
           // 自动关闭
           this.closeSubPathModal();
         } else {
-          alert(
-            "扫描失败: " + (data.result ? data.result.message : "未知错误")
-          );
+          alert("扫描失败: " + (data.message ? data.message : "未知错误"));
         }
       } catch (err) {
         console.error("指定路径扫描失败:", err);
@@ -320,7 +316,7 @@ new Vue({
     },
     async performSubRollBack() {
       if (!this.subPath.trim()) {
-        alert("请输入子路径");
+        alert("请输入Season路径");
         return;
       }
 
@@ -340,13 +336,9 @@ new Vue({
           this.loadSystemStatus();
           this.closeSubPathRollbackModal();
         } else {
-          alert(
-            "扫描失败: " + (data.result ? data.result.message : "未知错误")
-          );
+          console.log(data);
+          alert("失败: " + (data.message ? data.message : "未知错误"));
         }
-      } catch (err) {
-        console.error("指定路径回滚失败:", err);
-        alert("扫描失败: 网络错误");
       } finally {
         this.subScanLoading = false;
       }

@@ -12,7 +12,7 @@
     rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.1.8/vue.min.js"></script>
-  <link rel="stylesheet" href=" {{ url_for('static', filename='css/styles.css') }} " />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}" />
 </head>
 
 <body>
@@ -522,7 +522,7 @@
           </div>
 
           <div class="modal-body">
-            <label class="form-label fw-medium mb-2">子路径</label>
+            <label class="form-label fw-medium mb-2">Season 路径</label>
             <input type="text" class="form-control" v-model="subPath" placeholder="例如：Anime/葬送的芙莉莲/Season 01"
               autocomplete="off" />
           </div>
@@ -806,7 +806,7 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
-  <script src=" {{ url_for('static', filename='js/main.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 
 </html>
