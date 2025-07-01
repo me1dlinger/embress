@@ -12,6 +12,28 @@ import threading
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List
+import functools
+import time
+
+
+def retry_db_operation(max_retries=3, delay=0.1):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(self, *args, **kwargs):
+            for attempt in range(max_retries):
+                try:
+                    return func(self, *args, **kwargs)
+                except sqlite3.OperationalError as e:
+                    if "database is locked" in str(e) and attempt < max_retries - 1:
+                        time.sleep(delay * (2**attempt))  # 指数退避
+                        continue
+                    raise
+            return None
+
+        return wrapper
+
+    return decorator
+
 
 CONFIG_DB_PATH = os.getenv("CONFIG_DB_PATH", "data/conf/config.db")
 
@@ -55,16 +77,16 @@ class ConfigDB:
         """为当前线程获取 / 创建独立连接"""
         if not hasattr(self._local, "conn"):
             Path(CONFIG_DB_PATH).parent.mkdir(parents=True, exist_ok=True)
-            self._local.conn = sqlite3.connect(CONFIG_DB_PATH, check_same_thread=False)
+            self._local.conn = sqlite3.connect(
+                CONFIG_DB_PATH, check_same_thread=False, timeout=30.0  # 添加30秒超时
+            )
             self._local.cursor = self._local.conn.cursor()
 
             # 并发优化
             self._local.cursor.execute("PRAGMA journal_mode=WAL;")
             self._local.cursor.execute("PRAGMA foreign_keys=ON;")
-
-            # 确保全局只初始化一次
+            self._local.cursor.execute("PRAGMA busy_timeout=30000;")  # 30秒忙等待
             self._ensure_initialized()
-
         return self._local.conn, self._local.cursor
 
     def _ensure_initialized(self):
@@ -265,40 +287,46 @@ class ConfigDB:
         conn.commit()
         return cursor.rowcount > 0
 
+    @retry_db_operation()
     def add_scan_history(self, result: dict):
         conn, cursor = self._get_connection()
-        cursor.execute(
-            """
-            INSERT INTO scan_history
-              (timestamp, status, message, processed, renamed,
-               renamed_subtitle, deleted_nfo, target, data)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
-        """,
-            (
-                result.get("timestamp"),
-                result.get("status"),
-                result.get("message"),
-                result.get("processed", 0),
-                result.get("renamed_video", 0),
-                result.get("renamed_subtitle", 0),
-                result.get("deleted_nfo", 0),
-                result.get("target"),
-                json.dumps(result, ensure_ascii=False),
-            ),
-        )
-        conn.commit()
+        try:
+            conn.execute("BEGIN IMMEDIATE;")
+            cursor.execute(
+                """
+                INSERT INTO scan_history
+                (timestamp, status, message, processed, renamed,
+                renamed_subtitle, deleted_nfo, target, data)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """,
+                (
+                    result.get("timestamp"),
+                    result.get("status"),
+                    result.get("message"),
+                    result.get("processed", 0),
+                    result.get("renamed_video", 0),
+                    result.get("renamed_subtitle", 0),
+                    result.get("deleted_nfo", 0),
+                    result.get("target"),
+                    json.dumps(result, ensure_ascii=False),
+                ),
+            )
+            conn.commit()
 
-        cursor.execute(
+            cursor.execute(
+                """
+                DELETE FROM scan_history
+                WHERE id NOT IN (
+                    SELECT id FROM scan_history
+                    ORDER BY timestamp DESC
+                    LIMIT 50
+                );
             """
-            DELETE FROM scan_history
-            WHERE id NOT IN (
-                SELECT id FROM scan_history
-                ORDER BY timestamp DESC
-                LIMIT 50
-            );
-        """
-        )
-        conn.commit()
+            )
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            raise sqlite3.OperationalError(f"添加扫描历史失败: {e}")
 
     def get_scan_history(self):
         conn, cursor = self._get_connection()

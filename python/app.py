@@ -121,6 +121,7 @@ def scan_directory():
     try:
         app.logger.info(f"开始扫描子目录: {sub_path}")
         result = renamer.scan_and_rename(sub_path=sub_path)
+        app.logger.info(f"手动扫描子目录完成: {result}")
         if result.get("status") == "error":
             return jsonify({"success": False, "message": result.get("message")}), 200
         config_db.add_scan_history(result)

@@ -96,6 +96,8 @@ class EmbressRenamer:
     def __init__(self, media_path: str):
         self.media_path = Path(media_path)
         self.logger = self._setup_logger()
+        self._pending_change_records: List[Dict] = []
+        self._seasons_to_update: Set[Path] = set()
 
     def _setup_logger(self) -> logging.Logger:
         logger = logging.getLogger("EmbressRenamer")
@@ -450,33 +452,6 @@ class EmbressRenamer:
             processed_changes.append(c)
         return processed_changes
 
-    def _save_change_record(
-        self, season_dir: Path, media_type: str, changes: List[Dict]
-    ):
-        processed_changes = []
-        for c in changes:
-            c["timestamp"] = datetime.datetime.now().isoformat()
-            c["media_type"] = media_type
-            c["path"] = str(
-                (season_dir / c.get("new", c.get("original", ""))).absolute()
-            )
-            try:
-                relative_path = season_dir.relative_to(self.media_path)
-                parts = relative_path.parts
-                if len(parts) >= 2:
-                    c["show_name"] = parts[-2]  # 倒数第二个是show
-                    c["season_name"] = parts[-1]  # 最后一个是season
-            except ValueError:
-                c["show_name"] = season_dir.parent.name
-                c["season_name"] = season_dir.name
-
-            processed_changes.append(c)
-        try:
-            config_db.add_change_records(processed_changes, str(season_dir))
-        except Exception as e:
-            self.logger.error(f"保存变更记录到数据库失败: {e}")
-        self._write_all_change_records(season_dir)
-
     def _write_all_change_records(self, season_dir):
         rename_record_path = season_dir / "rename_record.json"
         try:
@@ -632,6 +607,13 @@ class EmbressRenamer:
         self.logger.info(
             f"Scan completed: {total} files processed, {renamed} files renamed."
         )
+        if self._pending_change_records:
+            try:
+                config_db.add_change_records(self._pending_change_records)
+            except Exception as e:
+                self.logger.error("批量保存变更记录失败: %s", e)
+            for season_dir in self._seasons_to_update:
+                self._write_all_change_records(season_dir)
         return {
             "status": "completed",
             "processed": total,
@@ -643,6 +625,15 @@ class EmbressRenamer:
             "timestamp": datetime.datetime.now().isoformat(),
             "target": str(sub_path or "ALL"),
         }
+
+    def _queue_change_records(
+        self, season_dir: Path, media_type: str, changes: List[Dict]
+    ):
+        if not changes:
+            return
+        processed = self._get_new_change_record(season_dir, media_type, changes)
+        self._pending_change_records.extend(processed)
+        self._seasons_to_update.add(season_dir)
 
     def _delete_old_nfo(self, season_dir, old_stem, changes):
         nfo_path = season_dir / f"{old_stem}.nfo"
@@ -703,9 +694,7 @@ class EmbressRenamer:
         media_type_name: str,
     ) -> Tuple[List[Dict], int, int, int, int]:
         processed_files_list: List[Dict] = []
-        total, renamed = 0, 0
-        renamed_sub = 0
-        deleted_nfo = 0
+        total, renamed, renamed_sub, deleted_nfo = 0, 0, 0, 0
         processed_files = self._season_processed_set(season_dir)
         season_num_hint = self._get_season_from_path(season_dir)
         season_changes: List[Dict] = []
@@ -718,13 +707,15 @@ class EmbressRenamer:
                 or (abs_path, f.name) in processed_files
             ):
                 continue
-
             file_info, changes, renamed_flag = self._process_episode_file(
                 f, season_num_hint, abs_path
             )
             processed_files_list.append(file_info)
             season_changes.extend(changes)
-            if file_info.get("status") != STATUS_WHITELIST:
+            if (
+                file_info.get("status") != STATUS_WHITELIST
+                and file_info.get("status") != STATUS_SKIP
+            ):
                 total += 1
             if renamed_flag:
                 renamed += 1
@@ -736,7 +727,7 @@ class EmbressRenamer:
             if orphan_changes:
                 season_changes.extend(orphan_changes)
         if season_changes:
-            self._save_change_record(season_dir, media_type_name, season_changes)
+            self._queue_change_records(season_dir, media_type_name, season_changes)
             counts = self._count_success_by_type(season_changes)
             renamed = counts.get("rename", 0)
             renamed_sub = counts.get("subtitle_rename", 0)
