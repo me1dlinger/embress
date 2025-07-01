@@ -1,4 +1,7 @@
-# EMBRESS
+<div align="center">
+ <img width="300" src="./docs/imgs/logo.svg"/>
+</div>
+
 
 <div align="center">
 
@@ -148,20 +151,30 @@ services:
 
 ## 🧩 Screenshots
 
-![1](screenshots/1.png)
-
-![1.5](screenshots/1.5.png)
-
-![1.6](screenshots/1.6.png)
-
-![1.7](screenshots/1.7.png)
-
-![1.8](screenshots/1.8.png)
-
-![2](screenshots/2.png)
-
-![3](screenshots/3.png)
-
-![4](screenshots/4.png)
-
-![5](screenshots/5.png)
+<div align="center">
+ <img src="./docs/screenshots/1.png"/>
+</div>
+<div align="center">
+ <img src="./docs/screenshots/1.5.png"/>
+</div>
+<div align="center">
+ <img src="./docs/screenshots/1.6.png"/>
+</div>
+<div align="center">
+ <img src="./docs/screenshots/1.7.png"/>
+</div>
+<div align="center">
+ <img src="./docs/screenshots/1.8.png"/>
+</div>
+<div align="center">
+ <img src="./docs/screenshots/2.png"/>
+</div>
+<div align="center">
+ <img src="./docs/screenshots/3.png"/>
+</div>
+<div align="center">
+ <img src="./docs/screenshots/4.png"/>
+</div>
+<div align="center">
+ <img src="./docs/screenshots/5.png"/>
+</div>

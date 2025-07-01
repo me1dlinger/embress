@@ -1,7 +1,6 @@
-<div align="center" style="width:200px;">
- <img src="./docs/imgs/logo.svg"/>
+<div align="center">
+ <img width="300" src="./docs/imgs/logo.svg"/>
 </div>
-
 
 <div align="center">
 
