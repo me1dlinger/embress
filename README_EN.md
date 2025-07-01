@@ -17,8 +17,18 @@
 
 ---
 
-## 🚀 Features
+## 🎗️ Usage Prerequisites
 
+- File Naming Convention​
+Ensure your media library follows this structure: [**/data/anime/Series XX/Season 01/AnimeXX 01 [1920x1080].mkv**](https://emby.media/support/articles/TV-Naming.html)
+
+- Docker Volume Mapping​
+Map your host's directory to the container, like:
+ **-v /data/anime:/app/media/anime**
+EMBRESS will automatically detect seasons via Season XX directory names
+
+
+## 🚀 Features
 
 
 ### 📁 Auto-Renaming
@@ -26,6 +36,8 @@
 - Scheduled directory scanning
 - Automatically apply regex rules for filename rewriting
 - Logging for scan and rename operations
+- Whitelist support
+- To be continued...
 
 ### 📊 Web Dashboard
 
@@ -134,7 +146,7 @@ services:
       - SCAN_INTERVAL=3600
 ```
 
-## 🧩 界面截图
+## 🧩 Screenshots
 
 ![1](screenshots/1.png)
 
