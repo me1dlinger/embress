@@ -174,29 +174,36 @@
                     <div class="card-body">
                       <div class="row mt-2">
                         <div class="col-6">
-                          <button class="btn btn-success w-100 mb-3" @click="performManualScan" :disabled="scanLoading">
-                            <span v-if="scanLoading" class="spinner-border spinner-border-sm" role="status"></span>
-                            <i v-else class="bi bi-search me-2"></i>
-                            [[ scanLoading ? '扫描中...' : '全部扫描' ]]
+                          <button class="btn w-100 mb-3" style="background-color: #4285F4;" @click="performManualScan"
+                            :disabled="scanLoading">
+
+                            <span style="color: white;">
+                              <span v-if="scanLoading" class="spinner-border spinner-border-sm" role="status">
+
+                              </span><i v-else class="bi bi-search me-2"></i>
+                              [[ scanLoading ? '扫描中...' : '全部扫描' ]]</span>
                           </button>
                         </div>
                         <div class="col-6">
-                          <button class="btn btn-warning w-100 mb-3" @click="showRegexConfig">
-                            <i class="bi bi-gear me-2"></i>正则配置
-                          </button>
-                        </div>
-                      </div>
-                      <div class="row mt-2">
-                        <div class="col-6">
-                          <button class="btn btn-info w-100 mb-3" @click="showSubPathModal = true">
+                          <button class="btn w-100 mb-3" style="background-color: #34A853;"
+                            @click="showSubPathModal = true">
 
                             <span style="color: white;"><i class="bi bi-folder2-open me-2"></i>指定扫描</span>
                           </button>
 
                         </div>
+
+                      </div>
+                      <div class="row mt-2">
                         <div class="col-6">
-                          <button class="btn btn-info w-100 mb-3" @click="showSubPathRollbackModal = true">
-                            <span style="color: white;"><i class="bi bi-folder2-open me-2"></i>指定还原</span>
+                          <button class="btn w-100 mb-3" style="background-color: #9B59B6;" @click="showRegexConfig">
+                            <span style="color: white;"><i class="bi bi-gear me-2"></i>正则配置</span>
+                          </button>
+                        </div>
+                        <div class="col-6">
+                          <button class="btn w-100 mb-3" style="background-color: #F39C12;"
+                            @click="showSubPathRollbackModal = true">
+                            <span style="color: white;"><i class="bi bi-signpost me-2"></i>指定还原</span>
                           </button>
                         </div>
                       </div>
