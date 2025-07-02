@@ -192,6 +192,13 @@ new Vue({
             "Access Key 无效或已过期，请重新登录。",
             "bi-lock"
           );
+        } else {
+          this.showModalComponent(
+            "error",
+            "请求失败",
+            "请求失败: 网络错误",
+            "bi-x-circle"
+          );
         }
         this.systemStatus = null;
       } finally {
@@ -240,6 +247,13 @@ new Vue({
             "Access Key 无效或已过期，请重新登录。",
             "bi-lock"
           );
+        } else {
+          this.showModalComponent(
+            "error",
+            "请求失败",
+            "请求失败: 网络错误",
+            "bi-x-circle"
+          );
         }
       } finally {
         this.scanLoading = false;
@@ -265,6 +279,13 @@ new Vue({
             "认证失败",
             "Access Key 无效或已过期，请重新登录。",
             "bi-lock"
+          );
+        } else {
+          this.showModalComponent(
+            "error",
+            "请求失败",
+            "请求失败: 网络错误",
+            "bi-x-circle"
           );
         }
         this.history = [];
@@ -293,6 +314,13 @@ new Vue({
             "Access Key 无效或已过期，请重新登录。",
             "bi-lock"
           );
+        } else {
+          this.showModalComponent(
+            "error",
+            "请求失败",
+            "请求失败: 网络错误",
+            "bi-x-circle"
+          );
         }
         this.changeRecords = [];
       } finally {
@@ -318,6 +346,13 @@ new Vue({
             "认证失败",
             "Access Key 无效或已过期，请重新登录。",
             "bi-lock"
+          );
+        } else {
+          this.showModalComponent(
+            "error",
+            "请求失败",
+            "请求失败: 网络错误",
+            "bi-x-circle"
           );
         }
         this.logFiles = [];
@@ -352,6 +387,13 @@ new Vue({
             "认证失败",
             "Access Key 无效或已过期，请重新登录。",
             "bi-lock"
+          );
+        } else {
+          this.showModalComponent(
+            "error",
+            "请求失败",
+            "请求失败: 网络错误",
+            "bi-x-circle"
           );
         }
         this.logContentError = "加载失败";
@@ -487,6 +529,13 @@ new Vue({
             "Access Key 无效或已过期，请重新登录。",
             "bi-lock"
           );
+        } else {
+          this.showModalComponent(
+            "error",
+            "请求失败",
+            "请求失败: 网络错误",
+            "bi-x-circle"
+          );
         }
       } finally {
         this.subScanLoading = false;
@@ -520,6 +569,13 @@ new Vue({
             "Access Key 无效或已过期，请重新登录。",
             "bi-lock"
           );
+        } else {
+          this.showModalComponent(
+            "error",
+            "请求失败",
+            "请求失败: 网络错误",
+            "bi-x-circle"
+          );
         }
         this.whitelistFiles = [];
       }
@@ -539,6 +595,13 @@ new Vue({
             "认证失败",
             "Access Key 无效或已过期，请重新登录。",
             "bi-lock"
+          );
+        } else {
+          this.showModalComponent(
+            "error",
+            "请求失败",
+            "请求失败: 网络错误",
+            "bi-x-circle"
           );
         }
         this.whitelistFiles = [];
