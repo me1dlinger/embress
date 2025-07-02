@@ -15,7 +15,7 @@ from typing import Dict, List, Tuple, Optional, Set, Union
 from database import config_db
 import time
 from logging.handlers import RotatingFileHandler
-
+from logging_utils import get_logger
 
 LOGS_PATH = Path(os.getenv("LOG_PATH", "./data/logs"))
 MEDIA_PATH = os.getenv("MEDIA_PATH", "./data/media")
@@ -100,25 +100,13 @@ class EmbressRenamer:
         self._seasons_to_update: Set[Path] = set()
 
     def _setup_logger(self) -> logging.Logger:
-        logger = logging.getLogger("EmbressRenamer")
-
-        if not logger.handlers:
-            logger.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
-            logger.propagate = False
-
-            # 文件 handler
-            LOGS_PATH.mkdir(parents=True, exist_ok=True)
-            log_file = LOGS_PATH / f"emby_renamer_{datetime.datetime.now():%Y%m%d}.log"
-            file_handler = RotatingFileHandler(
-                log_file, maxBytes=10 * 1024 * 1024, backupCount=7, encoding="utf-8"
-            )
-            formatter = logging.Formatter(
-                "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
-            )
-            file_handler.setFormatter(formatter)
-            logger.addHandler(file_handler)
-
-        return logger
+        return get_logger(
+            name="EmbressRenamer",
+            log_dir=LOGS_PATH,
+            base_name="emby_renamer",
+            level=getattr(logging, LOG_LEVEL, logging.INFO),
+            to_console=True,
+        )
 
     def _extract_episode_info(
         self, filename: str

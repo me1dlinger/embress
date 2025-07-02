@@ -9,13 +9,13 @@ import os
 import json
 import logging
 from pathlib import Path
-from logging.handlers import RotatingFileHandler
+from logging.handlers import TimedRotatingFileHandler
 from flask import Flask, render_template, request, jsonify
 from apscheduler.schedulers.background import BackgroundScheduler
 from embress_renamer import EmbressRenamer, WhitelistLoader
 from database import config_db
 from datetime import datetime, timedelta
-
+from logging_utils import DailyFileHandler
 
 LOGS_PATH = Path(os.getenv("LOG_PATH", "./data/logs"))
 MEDIA_PATH = os.getenv("MEDIA_PATH", "./data/media")
@@ -28,13 +28,14 @@ MAX_RETRIES = 3
 RETRY_DELAY = 0.5
 
 app = Flask(__name__)
+app.logger.propagate = False
 renamer = EmbressRenamer(MEDIA_PATH)
 scheduler = BackgroundScheduler()
 
 WHITELIST_ENDPOINTS = {
-    "static",  # Flask 静态文件
-    "index",  # 首页 HTML
-    "authenticate",  # /api/auth
+    "static",
+    "index",
+    "authenticate", 
 }
 
 
@@ -56,7 +57,7 @@ def global_access_key_guard():
     )
     if key != ACCESS_KEY:
         app.logger.warning(
-            "未授权访问: endpoint=%s ip=%s",
+            "Unauthorized access: endpoint=%s ip=%s",
             request.endpoint,
             request.remote_addr,
         )
@@ -65,12 +66,12 @@ def global_access_key_guard():
 
 def scheduled_scan() -> None:
     try:
-        app.logger.info("开始定时扫描 … …")
+        app.logger.info("Start scheduled scanning … …")
         result = renamer.scan_and_rename()
         config_db.add_scan_history(result)
-        app.logger.info(f"定时扫描完成: {result}")
+        app.logger.info(f"Scheduled scanning completed: {result}")
     except Exception as exc:
-        app.logger.exception("定时扫描失败")
+        app.logger.exception("Scheduled scanning failed")
         error_result = {
             "status": "error",
             "message": str(exc),
@@ -132,13 +133,13 @@ def get_history():
 @app.route("/api/manual-scan", methods=["POST"])
 def manual_scan():
     try:
-        app.logger.info("开始手动扫描 … …")
+        app.logger.info("Start manual scanning … …")
         result = renamer.scan_and_rename()
         config_db.add_scan_history(result)
-        app.logger.info(f"手动扫描完成: {result}")
+        app.logger.info(f"Manual scanning completed: {result}")
         return jsonify({"success": True, "result": result})
     except Exception as exc:
-        app.logger.exception("手动扫描失败")
+        app.logger.exception("Manual scanning failed")
         error_result = {
             "status": "error",
             "message": str(exc),
@@ -155,15 +156,15 @@ def scan_directory():
     if not sub_path:
         return jsonify({"success": False, "message": "缺少 sub_path"}), 200
     try:
-        app.logger.info(f"开始扫描子目录: {sub_path}")
+        app.logger.info(f"Start scan directory: {sub_path}")
         result = renamer.scan_and_rename(sub_path=sub_path)
-        app.logger.info(f"手动扫描子目录完成: {result}")
+        app.logger.info(f"Directory scan completed: {result}")
         if result.get("status") == "error":
             return jsonify({"success": False, "message": result.get("message")}), 200
         config_db.add_scan_history(result)
         return jsonify({"success": True, "result": result})
     except Exception as exc:
-        app.logger.exception("扫描子目录失败")
+        app.logger.exception("Directory scan failed")
         return jsonify({"success": False, "message": str(exc)}), 200
 
 
@@ -171,18 +172,18 @@ def scan_directory():
 def rollback_season():
     data = request.get_json(silent=True) or {}
     sub_path = data.get("sub_path")
-    app.logger.info(f"开始回滚季: {sub_path}")
+    app.logger.info(f"Start rollback Season: {sub_path}")
     if not sub_path:
         return jsonify({"success": False, "message": "缺少 sub_path"}), 400
     season_dir = Path(MEDIA_PATH) / sub_path
     rollback_record_path = season_dir / "rollback.json"
     media_type = renamer._extract_media_type(season_dir)
     if not season_dir.exists():
-        return jsonify({"success": False, "message": "Season 目录不存在"}), 200
+        return jsonify({"success": False, "message": "Season path not found "}), 200
     try:
         original_records = config_db.get_season_change_records(str(season_dir))
     except Exception as e:
-        app.logger.error(f"获取变更记录失败: {e}")
+        app.logger.error(f"Failed to retrieve change records: {e}")
         return jsonify({"records": [], "total": 0, "error": str(e)}), 500
 
     rollback_results = []
@@ -269,7 +270,7 @@ def rollback_season():
                     }
                 )
         except Exception as exc:
-            app.logger.exception("回滚出错")
+            app.logger.exception("Rollback failed")
             rollback_results.append(
                 {
                     "type": "rollback",
@@ -288,10 +289,10 @@ def rollback_season():
         try:
             config_db.add_change_records(nfo_delete_records)
         except Exception as e:
-            app.logger.error(f"保存删除记录到数据库失败: {e}")
+            app.logger.error(f"Failed to save and delete records to database: {e}")
         renamer._write_all_change_records(season_dir)
     except Exception as exc:
-        app.logger.exception("更新 rename_record.json 标记失败")
+        app.logger.exception("Failed to update the rename_record.json")
     if rollback_results:
         existing = []
         if rollback_record_path.exists():
@@ -316,7 +317,7 @@ def rollback_season():
                 json.dumps(all_records, ensure_ascii=False, indent=2), encoding="utf-8"
             )
         except Exception as exc:
-            app.logger.exception("写入 rollback.json 失败")
+            app.logger.exception("Writing rollback.json failed")
 
     return jsonify(
         {
@@ -334,7 +335,7 @@ def get_regex_patterns():
         patterns = config_db.get_regex_patterns()
         return jsonify({"success": True, "patterns": patterns})
     except Exception as exc:
-        app.logger.exception("读取正则配置失败")
+        app.logger.exception("Reading regex configuration failed")
         return jsonify({"success": False, "message": str(exc)}), 500
 
 
@@ -357,7 +358,7 @@ def update_regex_patterns():
         config_db.update_regex_patterns(payload)
         return jsonify({"success": True, "message": "正则配置已更新"})
     except Exception as exc:
-        app.logger.exception("写入正则配置失败")
+        app.logger.exception("Writing regex configuration failed")
         return jsonify({"success": False, "message": str(exc)}), 500
 
 
@@ -370,7 +371,7 @@ def add_to_whitelist():
             summary = config_db.add_whitelist_items(data["items"])
             return jsonify({"success": summary["failed"] == [], **summary})
         except Exception as exc:
-            app.logger.exception("批量写入白名单失败")
+            app.logger.exception("Batch writing to whitelist failed")
             return jsonify({"success": False, "message": str(exc)}), 500
     # 兼容单条
     file_path = data.get("file_path")
@@ -387,7 +388,7 @@ def add_to_whitelist():
             }
         )
     except Exception as exc:
-        app.logger.exception("写入白名单失败")
+        app.logger.exception("Writing to whitelist failed")
         return jsonify({"success": False, "message": str(exc)}), 500
 
 
@@ -397,7 +398,7 @@ def get_whitelist():
         entries = config_db.get_whitelist()
         return jsonify({"success": True, "whitelist": entries})
     except Exception as exc:
-        app.logger.exception("读取白名单失败")
+        app.logger.exception("Reading from whitelist failed")
         return jsonify({"success": False, "message": str(exc)}), 500
 
 
@@ -413,7 +414,7 @@ def delete_from_whitelist():
         WhitelistLoader.force_reload()
         return jsonify({"success": True, "removed": removed, "message": message})
     except Exception as exc:
-        app.logger.exception("写入白名单失败")
+        app.logger.exception("Writing to whitelist failed")
         return jsonify({"success": False, "message": str(exc)}), 500
 
 
@@ -423,7 +424,7 @@ def get_change_records():
         records = config_db.get_change_records(limit=200)
         return jsonify({"records": records, "total": len(records)})
     except Exception as e:
-        app.logger.error(f"获取变更记录失败: {e}")
+        app.logger.error(f"Failed to get change records: {e}")
         return jsonify({"records": [], "total": 0, "error": str(e)}), 500
 
 
@@ -459,41 +460,52 @@ def get_log_content(filename: str):
             {"filename": filename, "content": content, "total_lines": len(lines)}
         )
     except Exception as exc:
-        app.logger.exception("读取日志失败")
+        app.logger.exception("Failed to read log")
         return jsonify({"error": f"读取日志失败: {exc}"}), 500
 
 
 def setup_logging() -> None:
-    if app.debug:
-        return
-
     LOGS_PATH.mkdir(parents=True, exist_ok=True)
-    log_file = LOGS_PATH / f"app_{datetime.now():%Y%m%d}.log"
 
-    file_handler = RotatingFileHandler(
-        log_file, maxBytes=10 * 1024 * 1024, backupCount=7, encoding="utf-8"
-    )
     fmt = "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
-    file_handler.setFormatter(logging.Formatter(fmt))
+    formatter = logging.Formatter(fmt)
 
-    # 配置 root logger
+    file_handler = DailyFileHandler(log_dir=LOGS_PATH, base_name="app")
+    file_handler.setFormatter(formatter)
+    file_handler.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
+
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    console_handler.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
     root_logger = logging.getLogger()
     root_logger.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
-
-    if not any(isinstance(h, RotatingFileHandler) for h in root_logger.handlers):
+    if not any(isinstance(h, DailyFileHandler) for h in root_logger.handlers):
         root_logger.addHandler(file_handler)
+    if not any(isinstance(h, logging.StreamHandler) for h in root_logger.handlers):
+        root_logger.addHandler(console_handler)
+    app.logger.propagate = True
+    werkzeug_logger = logging.getLogger("werkzeug")
+    werkzeug_logger.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
+    werkzeug_logger.handlers.clear()
+    werkzeug_logger.addHandler(file_handler)
+    werkzeug_logger.addHandler(console_handler)
+    werkzeug_logger.propagate = False
 
 
 def init_change_record():
     try:
         if config_db._init_change_record_table():
-            app.logger.info("change_record 表已存在，跳过初始化")
+            app.logger.info(
+                "The change_decord table already exists, skip initialization"
+            )
         else:
-            app.logger.info("change_record 表不存在，创建表并迁移历史数据")
+            app.logger.info(
+                "The change_decord table does not exist. Create a table and migrate historical data"
+            )
 
             media_path = Path(MEDIA_PATH)
             if not media_path.exists():
-                app.logger.warning(f"媒体路径不存在: {MEDIA_PATH}")
+                app.logger.warning(f"The media path not found: {MEDIA_PATH}")
                 return
             all_records = []
             for media_type_dir in media_path.iterdir():
@@ -524,19 +536,23 @@ def init_change_record():
                                     rec["season_dir"] = str(season_dir)
                             all_records.extend(season_records)
                             app.logger.info(
-                                f"从 {record_file} 读取 {len(season_records)} 条记录"
+                                f"Read {len(season_records)} records from  {record_file}"
                             )
                         except Exception as e:
-                            app.logger.error(f"读取变更记录失败 {record_file}: {e}")
+                            app.logger.error(
+                                f"Failed to read change record: {record_file}: {e}"
+                            )
             if all_records:
-                app.logger.info(f"共读取 {len(all_records)} 条记录到 change_record 表")
+                app.logger.info(
+                    f"Read {len(all_records)} records to the change_decord table"
+                )
                 config_db.add_change_records(all_records)
             else:
-                app.logger.info("未发现可读取记录")
-            app.logger.info("change_record 表初始化成功")
+                app.logger.info("No readable records found")
+            app.logger.info("change_record initialization successful")
     except Exception as exc:
-        app.logger.error(f"初始化 change_record 表失败: {exc}")
-        raise RuntimeError("无法初始化 change_record 表") from exc
+        app.logger.error(f"change_record initialization failed: {exc}")
+        raise RuntimeError("Unable to initialize change_record") from exc
 
 
 def get_aligned_start(interval_seconds: int) -> datetime:
@@ -552,6 +568,7 @@ def get_aligned_start(interval_seconds: int) -> datetime:
 
 if __name__ == "__main__":
     setup_logging()
+
     init_change_record()
     if not scheduler.running:
         scheduler.add_job(
@@ -565,7 +582,7 @@ if __name__ == "__main__":
         )
         scheduler.start()
         app.logger.info(
-            f"定时任务已启动，扫描间隔: {SCAN_INTERVAL} 秒，首执行时间: {get_aligned_start(SCAN_INTERVAL)}"
+            f"The scheduled task has been initiated, scan interval: {SCAN_INTERVAL}, first execution time: {get_aligned_start(SCAN_INTERVAL)}"
         )
     port = int(os.getenv("FLASK_PORT", 15000))
     app.run(host="0.0.0.0", port=port, debug=False)
