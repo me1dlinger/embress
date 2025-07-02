@@ -75,21 +75,43 @@ new Vue({
   },
 
   methods: {
+    async auth_fetch(url, options = {}) {
+      const accessKey = localStorage.getItem("access_key");
+      const defaultHeaders = {
+        "Content-Type": "application/json",
+        "X-Access-Key": accessKey || "",
+      };
+      const finalOptions = {
+        method: "GET",
+        ...options,
+        headers: {
+          ...defaultHeaders,
+          ...(options.headers || {}),
+        },
+      };
+      try {
+        const response = await fetch(url, finalOptions);
+        if (!response.ok) {
+          const errorText = await response.text();
+          const error = new Error(errorText || `HTTP ${response.status}`);
+          error.status = response.status; // <== 关键
+          throw error;
+        }
+        return await response.json();
+      } catch (err) {
+        throw err;
+      }
+    },
     // 认证相关方法
     async authenticate() {
       this.authLoading = true;
       this.authError = "";
 
       try {
-        const response = await fetch("/api/auth", {
+        const result = await this.auth_fetch("/api/auth", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
           body: JSON.stringify({ access_key: this.accessKey }),
         });
-
-        const result = await response.json();
 
         if (result.success) {
           this.isAuthenticated = true;
@@ -107,7 +129,6 @@ new Vue({
         this.authLoading = false;
       }
     },
-
     async autoAuthenticate() {
       const savedKey = localStorage.getItem("access_key");
       if (!savedKey) return;
@@ -153,18 +174,25 @@ new Vue({
     // 系统状态相关方法
     async loadSystemStatus() {
       this.statusLoading = true;
-
       try {
-        const response = await fetch("/api/status");
-        const data = await response.json();
-
+        const data = await this.auth_fetch("/api/status");
         this.systemStatus = data;
-
         if (data.last_scan) {
           this.lastScanResult = data.last_scan;
         }
       } catch (error) {
-        console.error("加载系统状态失败:", error);
+        if (error.status === 401) {
+          // 鉴权失败逻辑
+          this.isAuthenticated = false;
+          localStorage.removeItem("access_key");
+          this.authError = "未授权或密钥无效";
+          this.showModalComponent(
+            "error",
+            "认证失败",
+            "Access Key 无效或已过期，请重新登录。",
+            "bi-lock"
+          );
+        }
         this.systemStatus = null;
       } finally {
         this.statusLoading = false;
@@ -176,11 +204,9 @@ new Vue({
       this.scanLoading = true;
 
       try {
-        const response = await fetch("/api/manual-scan", {
+        const data = await this.auth_fetch("/api/manual-scan", {
           method: "POST",
         });
-
-        const data = await response.json();
 
         if (data.success) {
           this.lastScanResult = data.result;
@@ -203,7 +229,18 @@ new Vue({
           );
         }
       } catch (error) {
-        this.showModalComponent("error", "扫描失败", "网络错误", "bi-x-circle");
+        if (error.status === 401) {
+          // 鉴权失败逻辑
+          this.isAuthenticated = false;
+          localStorage.removeItem("access_key");
+          this.authError = "未授权或密钥无效";
+          this.showModalComponent(
+            "error",
+            "认证失败",
+            "Access Key 无效或已过期，请重新登录。",
+            "bi-lock"
+          );
+        }
       } finally {
         this.scanLoading = false;
       }
@@ -214,12 +251,22 @@ new Vue({
       this.historyLoading = true;
 
       try {
-        const response = await fetch("/api/history");
-        const data = await response.json();
+        const data = await this.auth_fetch("/api/history");
 
         this.history = data.history || [];
       } catch (error) {
-        console.error("加载历史失败:", error);
+        if (error.status === 401) {
+          // 鉴权失败逻辑
+          this.isAuthenticated = false;
+          localStorage.removeItem("access_key");
+          this.authError = "未授权或密钥无效";
+          this.showModalComponent(
+            "error",
+            "认证失败",
+            "Access Key 无效或已过期，请重新登录。",
+            "bi-lock"
+          );
+        }
         this.history = [];
       } finally {
         this.historyLoading = false;
@@ -231,12 +278,22 @@ new Vue({
       this.recordsLoading = true;
 
       try {
-        const response = await fetch("/api/change-records");
-        const data = await response.json();
+        const data = await this.auth_fetch("/api/change-records");
 
         this.changeRecords = data.records || [];
       } catch (error) {
-        console.error("加载变更记录失败:", error);
+        if (error.status === 401) {
+          // 鉴权失败逻辑
+          this.isAuthenticated = false;
+          localStorage.removeItem("access_key");
+          this.authError = "未授权或密钥无效";
+          this.showModalComponent(
+            "error",
+            "认证失败",
+            "Access Key 无效或已过期，请重新登录。",
+            "bi-lock"
+          );
+        }
         this.changeRecords = [];
       } finally {
         this.recordsLoading = false;
@@ -248,12 +305,21 @@ new Vue({
       this.logsLoading = true;
 
       try {
-        const response = await fetch("/api/logs");
-        const data = await response.json();
-
+        const data = await this.auth_fetch("/api/logs");
         this.logFiles = data.logs || [];
       } catch (error) {
-        console.error("加载日志文件失败:", error);
+        if (error.status === 401) {
+          // 鉴权失败逻辑
+          this.isAuthenticated = false;
+          localStorage.removeItem("access_key");
+          this.authError = "未授权或密钥无效";
+          this.showModalComponent(
+            "error",
+            "认证失败",
+            "Access Key 无效或已过期，请重新登录。",
+            "bi-lock"
+          );
+        }
         this.logFiles = [];
       } finally {
         this.logsLoading = false;
@@ -267,9 +333,7 @@ new Vue({
       this.logContentError = "";
 
       try {
-        const response = await fetch(`/api/logs/${filename}`);
-        const data = await response.json();
-
+        const data = await this.auth_fetch("/api/logs/" + filename);
         if (data.error) {
           this.logContentError = data.error;
           this.logContent = "";
@@ -278,7 +342,18 @@ new Vue({
           this.logContentError = "";
         }
       } catch (error) {
-        console.error("加载日志内容失败:", error);
+        if (error.status === 401) {
+          // 鉴权失败逻辑
+          this.isAuthenticated = false;
+          localStorage.removeItem("access_key");
+          this.authError = "未授权或密钥无效";
+          this.showModalComponent(
+            "error",
+            "认证失败",
+            "Access Key 无效或已过期，请重新登录。",
+            "bi-lock"
+          );
+        }
         this.logContentError = "加载失败";
         this.logContent = "";
       } finally {
@@ -312,13 +387,10 @@ new Vue({
 
       this.subScanLoading = true;
       try {
-        const resp = await fetch("/api/scan-directory", {
+        const data = await this.auth_fetch("/api/scan-directory", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ sub_path: this.subPath.trim() }),
         });
-        const data = await resp.json();
-
         if (data.success) {
           this.lastScanResult = data.result;
           // 刷新相关面板
@@ -341,8 +413,26 @@ new Vue({
             "bi-x-circle"
           );
         }
-      } catch (err) {
-        this.showModalComponent("error", "扫描失败", "网络错误", "bi-x-circle");
+      } catch (error) {
+        if (error.status === 401) {
+          // 鉴权失败逻辑
+          this.isAuthenticated = false;
+          localStorage.removeItem("access_key");
+          this.authError = "未授权或密钥无效";
+          this.showModalComponent(
+            "error",
+            "认证失败",
+            "Access Key 无效或已过期，请重新登录。",
+            "bi-lock"
+          );
+        } else {
+          this.showModalComponent(
+            "error",
+            "扫描失败",
+            "网络错误",
+            "bi-x-circle"
+          );
+        }
       } finally {
         this.subScanLoading = false;
       }
@@ -360,14 +450,12 @@ new Vue({
 
       this.subScanLoading = true;
       try {
-        const resp = await fetch("/api/rollback-season", {
+        const data = await this.auth_fetch("/api/rollback-season", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ sub_path: this.subPath.trim() }),
         });
-        const data = await resp.json();
         if (data.success) {
-          // this.lastScanResult = data.result;
+          this.lastScanResult = data.result;
           // 刷新相关面板
           this.loadHistory();
           this.loadChangeRecords();
@@ -387,6 +475,19 @@ new Vue({
             "bi-x-circle"
           );
         }
+      } catch (error) {
+        if (error.status === 401) {
+          // 鉴权失败逻辑
+          this.isAuthenticated = false;
+          localStorage.removeItem("access_key");
+          this.authError = "未授权或密钥无效";
+          this.showModalComponent(
+            "error",
+            "认证失败",
+            "Access Key 无效或已过期，请重新登录。",
+            "bi-lock"
+          );
+        }
       } finally {
         this.subScanLoading = false;
       }
@@ -404,23 +505,42 @@ new Vue({
     // 显示白名单文件弹窗
     async showWhitelist() {
       try {
-        const response = await fetch("/api/whitelist");
-        const data = await response.json();
-
+        const data = await this.auth_fetch("/api/whitelist");
         this.whitelistFiles = data.whitelist || [];
         this.showWhitelistModal = true;
       } catch (error) {
-        console.error("加载白名单文件失败:", error);
+        if (error.status === 401) {
+          // 鉴权失败逻辑
+          this.isAuthenticated = false;
+          localStorage.removeItem("access_key");
+          this.authError = "未授权或密钥无效";
+          this.showModalComponent(
+            "error",
+            "认证失败",
+            "Access Key 无效或已过期，请重新登录。",
+            "bi-lock"
+          );
+        }
         this.whitelistFiles = [];
       }
     },
     async getWhitelist() {
       try {
-        const response = await fetch("/api/whitelist");
-        const data = await response.json();
+        const data = await this.auth_fetch("/api/whitelist");
         this.whitelistFiles = data.whitelist || [];
       } catch (error) {
-        console.error("加载白名单文件失败:", error);
+        if (error.status === 401) {
+          // 鉴权失败逻辑
+          this.isAuthenticated = false;
+          localStorage.removeItem("access_key");
+          this.authError = "未授权或密钥无效";
+          this.showModalComponent(
+            "error",
+            "认证失败",
+            "Access Key 无效或已过期，请重新登录。",
+            "bi-lock"
+          );
+        }
         this.whitelistFiles = [];
       }
     },
@@ -435,18 +555,12 @@ new Vue({
 
       try {
         // 预留接口调用
-        const response = await fetch("/api/whitelist", {
+        const result = await this.auth_fetch("/api/whitelist", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
           body: JSON.stringify({
             file_path: filePath,
           }),
         });
-
-        const result = await response.json();
-
         if (result.success) {
           // 添加成功，从列表中移除该文件
           this.unrenamedFiles = this.unrenamedFiles.filter(
@@ -470,12 +584,25 @@ new Vue({
           );
         }
       } catch (error) {
-        this.showModalComponent(
-          "error",
-          "白名单添加失败",
-          "添加到白名单失败: 网络错误",
-          "bi-x-circle"
-        );
+        if (error.status === 401) {
+          // 鉴权失败逻辑
+          this.isAuthenticated = false;
+          localStorage.removeItem("access_key");
+          this.authError = "未授权或密钥无效";
+          this.showModalComponent(
+            "error",
+            "认证失败",
+            "Access Key 无效或已过期，请重新登录。",
+            "bi-lock"
+          );
+        } else {
+          this.showModalComponent(
+            "error",
+            "请求失败",
+            "请求失败: 网络错误",
+            "bi-x-circle"
+          );
+        }
       } finally {
         this.addToWhitelistLoading = false;
       }
@@ -484,18 +611,12 @@ new Vue({
       this.deleteFromWhitelistLoading = true;
 
       try {
-        const response = await fetch("/api/whitelist", {
+        const result = await this.auth_fetch("/api/whitelist", {
           method: "DELETE",
-          headers: {
-            "Content-Type": "application/json",
-          },
           body: JSON.stringify({
             file_path: filePath,
           }),
         });
-
-        const result = await response.json();
-
         if (result.success) {
           this.whitelistFiles = this.whitelistFiles.filter(
             (file) => file.path !== filePath
@@ -517,12 +638,25 @@ new Vue({
           );
         }
       } catch (error) {
-        this.showModalComponent(
-          "error",
-          "移出白名单失败",
-          "移出白名单失败: 网络错误",
-          "bi-x-circle"
-        );
+        if (error.status === 401) {
+          // 鉴权失败逻辑
+          this.isAuthenticated = false;
+          localStorage.removeItem("access_key");
+          this.authError = "未授权或密钥无效";
+          this.showModalComponent(
+            "error",
+            "认证失败",
+            "Access Key 无效或已过期，请重新登录。",
+            "bi-lock"
+          );
+        } else {
+          this.showModalComponent(
+            "error",
+            "请求失败",
+            "请求失败: 网络错误",
+            "bi-x-circle"
+          );
+        }
       } finally {
         this.deleteFromWhitelistLoading = false;
       }
@@ -567,9 +701,8 @@ new Vue({
       if (this.newWhitelistItems.length === 0) return;
       this.addToWhitelistLoading = true;
       try {
-        const response = await fetch("/api/whitelist", {
+        const response = await this.auth_fetch("/api/whitelist", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ items: this.getNewWhitelistItems() }),
         });
         const result = await response.json();
@@ -587,13 +720,26 @@ new Vue({
             "bi-x-circle"
           );
         }
-      } catch (err) {
-        this.showModalComponent(
-          "error",
-          "批量添加失败",
-          "批量加入白名单失败: 网络错误",
-          "bi-x-circle"
-        );
+      } catch (error) {
+        if (error.status === 401) {
+          // 鉴权失败逻辑
+          this.isAuthenticated = false;
+          localStorage.removeItem("access_key");
+          this.authError = "未授权或密钥无效";
+          this.showModalComponent(
+            "error",
+            "认证失败",
+            "Access Key 无效或已过期，请重新登录。",
+            "bi-lock"
+          );
+        } else {
+          this.showModalComponent(
+            "error",
+            "请求失败",
+            "请求失败: 网络错误",
+            "bi-x-circle"
+          );
+        }
       } finally {
         this.addToWhitelistLoading = false;
         this.getWhitelist();
@@ -639,9 +785,7 @@ new Vue({
       this.regexLoading = true;
 
       try {
-        const response = await fetch("/api/regex-patterns");
-        const data = await response.json();
-
+        const data = await this.auth_fetch("/api/regex-patterns");
         if (data.success) {
           // 确保格式化为数组
           if (typeof data.patterns === "string") {
@@ -653,7 +797,25 @@ new Vue({
           this.regexError = "加载失败: " + data.message;
         }
       } catch (error) {
-        console.error("加载正则配置失败:", error);
+        if (error.status === 401) {
+          // 鉴权失败逻辑
+          this.isAuthenticated = false;
+          localStorage.removeItem("access_key");
+          this.authError = "未授权或密钥无效";
+          this.showModalComponent(
+            "error",
+            "认证失败",
+            "Access Key 无效或已过期，请重新登录。",
+            "bi-lock"
+          );
+        } else {
+          this.showModalComponent(
+            "error",
+            "请求失败",
+            "请求失败: 网络错误",
+            "bi-x-circle"
+          );
+        }
         this.regexError = "加载失败: 网络错误";
       } finally {
         this.regexLoading = false;
@@ -671,16 +833,10 @@ new Vue({
       this.regexError = "";
 
       try {
-        const response = await fetch("/api/regex-patterns", {
+        const result = await this.auth_fetch("/api/regex-patterns", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
           body: JSON.stringify(this.regexPatterns),
         });
-
-        const result = await response.json();
-
         if (result.success) {
           // 保存成功，关闭弹窗
           this.closeRegexModal();
@@ -695,7 +851,25 @@ new Vue({
           this.regexError = "保存失败: " + result.message;
         }
       } catch (error) {
-        console.error("保存正则配置失败:", error);
+        if (error.status === 401) {
+          // 鉴权失败逻辑
+          this.isAuthenticated = false;
+          localStorage.removeItem("access_key");
+          this.authError = "未授权或密钥无效";
+          this.showModalComponent(
+            "error",
+            "认证失败",
+            "Access Key 无效或已过期，请重新登录。",
+            "bi-lock"
+          );
+        } else {
+          this.showModalComponent(
+            "error",
+            "请求失败",
+            "请求失败: 网络错误",
+            "bi-x-circle"
+          );
+        }
         this.regexError = "保存失败: 网络错误";
       } finally {
         this.regexSaving = false;

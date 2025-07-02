@@ -31,6 +31,37 @@ app = Flask(__name__)
 renamer = EmbressRenamer(MEDIA_PATH)
 scheduler = BackgroundScheduler()
 
+WHITELIST_ENDPOINTS = {
+    "static",  # Flask 静态文件
+    "index",  # 首页 HTML
+    "authenticate",  # /api/auth
+}
+
+
+def _unauthorized():
+    """统一401响应"""
+    return jsonify({"success": False, "message": "未授权或密钥无效"}), 401
+
+
+@app.before_request
+def global_access_key_guard():
+    """所有请求在真正进入视图函数前先经过这里"""
+    # 2. 跳过豁免端点
+    if request.endpoint in WHITELIST_ENDPOINTS:
+        return
+    key = (
+        request.headers.get("X-Access-Key")
+        or request.args.get("access_key")
+        or (request.get_json(silent=True) or {}).get("access_key")
+    )
+    if key != ACCESS_KEY:
+        app.logger.warning(
+            "未授权访问: endpoint=%s ip=%s",
+            request.endpoint,
+            request.remote_addr,
+        )
+        return _unauthorized()
+
 
 def scheduled_scan() -> None:
     try:
@@ -75,6 +106,10 @@ def authenticate():
 
 @app.route("/api/status")
 def get_status():
+    next_run_time = "未安排"
+    job = scheduler.get_job(job_id="scan_job")  # 通过job_id获取任务
+    if job and job.next_run_time:
+        next_run_time = job.next_run_time.astimezone().strftime("%Y-%m-%d %H:%M:%S")
     return jsonify(
         {
             "media_path": MEDIA_PATH,
@@ -83,6 +118,7 @@ def get_status():
             "scheduler_running": scheduler.running,
             "total_scans": config_db.get_scan_history_count(),
             "total_whitelist": len(config_db.get_whitelist()),
+            "next_scan_time": next_run_time,
         }
     )
 

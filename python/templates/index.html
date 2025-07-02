@@ -129,12 +129,6 @@
                           </div>
                         </div>
                         <div class="row mt-2">
-                          <div class="col-6"><strong>扫描间隔:</strong></div>
-                          <div class="col-6">
-                            [[ systemStatus.scan_interval ]] 秒
-                          </div>
-                        </div>
-                        <div class="row mt-2">
                           <div class="col-6">
                             <strong>调度器状态:</strong>
                           </div>
@@ -145,6 +139,19 @@
                             </span>
                           </div>
                         </div>
+                        <div class="row mt-2">
+                          <div class="col-6"><strong>扫描间隔:</strong></div>
+                          <div class="col-6">
+                            [[ systemStatus.scan_interval ]] 秒
+                          </div>
+                        </div>
+                        <div class="row mt-2">
+                          <div class="col-6"><strong>下次扫描:</strong></div>
+                          <div class="col-6">
+                            [[ systemStatus.next_scan_time ]]
+                          </div>
+                        </div>
+
                         <div class="row mt-2">
                           <div class="col-6">
                             <strong>总扫描次数:</strong>
@@ -488,7 +495,7 @@
         </div>
       </div>
     </div>
-     <div v-if="showModal" class="custom-modal-overlay" @click.self="closeModal">
+    <div v-if="showModal" class="custom-modal-overlay" @click.self="closeModal">
       <div class="custom-modal" :class="'modal-' + modalType" :style="{ display: showModal ? 'block' : 'none' }">
         <div class="custom-modal-header">
           <i class="modal-icon bi" :class="modalIcon"></i>
