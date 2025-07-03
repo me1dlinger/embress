@@ -35,7 +35,7 @@ scheduler = BackgroundScheduler()
 WHITELIST_ENDPOINTS = {
     "static",
     "index",
-    "authenticate", 
+    "authenticate",
 }
 
 
@@ -78,18 +78,6 @@ def scheduled_scan() -> None:
             "timestamp": datetime.now().isoformat(),
         }
         config_db.add_scan_history(error_result)
-
-
-def _dedup_latest(records: list[dict]) -> list[dict]:
-    latest_map = {}
-    for rec in records:
-        key = rec.get("path") or rec.get("new")  # 两者理论相同，这里选 path 更稳
-        ts = rec.get("timestamp", "")
-        if not key:
-            continue
-        if key not in latest_map or ts > latest_map[key]["timestamp"]:
-            latest_map[key] = rec
-    return list(latest_map.values())
 
 
 @app.route("/")
@@ -172,161 +160,11 @@ def scan_directory():
 def rollback_season():
     data = request.get_json(silent=True) or {}
     sub_path = data.get("sub_path")
-    app.logger.info(f"Start rollback Season: {sub_path}")
     if not sub_path:
         return jsonify({"success": False, "message": "缺少 sub_path"}), 400
-    season_dir = Path(MEDIA_PATH) / sub_path
-    rollback_record_path = season_dir / "rollback.json"
-    media_type = renamer._extract_media_type(season_dir)
-    if not season_dir.exists():
-        return jsonify({"success": False, "message": "Season path not found "}), 200
-    try:
-        original_records = config_db.get_season_change_records(str(season_dir))
-    except Exception as e:
-        app.logger.error(f"Failed to retrieve change records: {e}")
-        return jsonify({"records": [], "total": 0, "error": str(e)}), 500
-
-    rollback_results = []
-    original_records = _dedup_latest(original_records)
-    nfo_changes = []
-    rolled_back_file_cnt = 0
-    rolled_back_sub_cnt = 0
-    for rec in original_records:
-        if (
-            rec.get("type") != "rename"
-            or rec.get("status") != "success"
-            or rec.get("rollback") is True
-        ):
-            continue
-        cur_path = Path(rec["path"])
-        original_name = rec["original"]
-        if not cur_path.exists():
-            rollback_results.append(
-                {
-                    "type": "rollback",
-                    "original": rec["new"],
-                    "new": original_name,
-                    "status": "failed",
-                    "error": "文件不存在",
-                    "timestamp": datetime.now().isoformat(),
-                    "path": rec["path"],
-                }
-            )
-            continue
-        try:
-            changes = renamer._rollback_file_and_subtitles(
-                cur_path, original_name, original_records
-            )
-
-            if renamer._count_success_renames(changes):
-                rolled_back_file_cnt += 1
-                rollback_result = {
-                    "type": "rollback",
-                    "original": rec["new"],
-                    "new": original_name,
-                    "status": "rolled_back",
-                    "timestamp": datetime.now().isoformat(),
-                    "path": str((cur_path.parent / original_name).absolute()),
-                }
-                rollback_results.append(rollback_result)
-                rec["rollback"] = True
-                config_db.update_change_record_rollback(
-                    rec["path"], rec["original"], True
-                )
-                for change in changes:
-                    if (
-                        change.get("type") == "subtitle_rename"
-                        and change.get("status") == "success"
-                    ):
-                        rolled_back_sub_cnt += 1
-                        rollback_result = {
-                            "type": "subtitle_rollback",
-                            "original": change["original"],
-                            "new": change["new"],
-                            "status": "rolled_back",
-                            "timestamp": datetime.now().isoformat(),
-                            "path": str((cur_path.parent / change["new"]).absolute()),
-                        }
-                        rollback_results.append(rollback_result)
-                        subtitle_path = str(
-                            (cur_path.parent / change["original"]).absolute()
-                        )
-                        config_db.update_change_record_rollback(
-                            subtitle_path, change["new"], True
-                        )
-                nfo_changes = renamer._delete_old_nfo(
-                    season_dir, Path(rec["new"]).stem, nfo_changes
-                )
-            else:
-                rollback_results.append(
-                    {
-                        "type": "rollback",
-                        "original": rec["new"],
-                        "new": original_name,
-                        "status": "failed",
-                        "error": "重命名失败",
-                        "timestamp": datetime.now().isoformat(),
-                        "path": rec["path"],
-                    }
-                )
-        except Exception as exc:
-            app.logger.exception("Rollback failed")
-            rollback_results.append(
-                {
-                    "type": "rollback",
-                    "original": rec["new"],
-                    "new": original_name,
-                    "status": "failed",
-                    "error": str(exc),
-                    "timestamp": datetime.now().isoformat(),
-                    "path": rec["path"],
-                }
-            )
-    try:
-        nfo_delete_records = renamer._get_new_change_record(
-            season_dir, media_type, nfo_changes
-        )
-        try:
-            config_db.add_change_records(nfo_delete_records)
-        except Exception as e:
-            app.logger.error(f"Failed to save and delete records to database: {e}")
-        renamer._write_all_change_records(season_dir)
-    except Exception as exc:
-        app.logger.exception("Failed to update the rename_record.json")
-    if rollback_results:
-        existing = []
-        if rollback_record_path.exists():
-            try:
-                existing = json.loads(rollback_record_path.read_text(encoding="utf-8"))
-            except Exception:
-                pass
-        rollback_result = {
-            "status": "completed",
-            "processed": rolled_back_file_cnt + rolled_back_sub_cnt,
-            "renamed": rolled_back_file_cnt,
-            "renamed_subtitle": rolled_back_sub_cnt,
-            "deleted_nfo": len(nfo_delete_records),
-            "timestamp": datetime.now().isoformat(),
-            "target": sub_path,
-            "scan_type": "rollback",
-        }
-        config_db.add_scan_history(rollback_result)
-        try:
-            all_records = existing + rollback_results
-            rollback_record_path.write_text(
-                json.dumps(all_records, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
-        except Exception as exc:
-            app.logger.exception("Writing rollback.json failed")
-
-    return jsonify(
-        {
-            "success": True,
-            "rolled_back_file": rolled_back_file_cnt,
-            "rolled_back_sub": rolled_back_sub_cnt,
-            "results": rollback_results,
-        }
-    )
+    app.logger.info(f"Start rollback Season: {sub_path}")
+    rollback_result = renamer.scan_and_rollback(sub_path)
+    return jsonify(rollback_result.get("result", {})), rollback_result.get("code", 200)
 
 
 @app.route("/api/regex-patterns", methods=["GET"])
@@ -421,10 +259,21 @@ def delete_from_whitelist():
 @app.route("/api/change-records")
 def get_change_records():
     try:
-        records = config_db.get_change_records(limit=200)
-        return jsonify({"records": records, "total": len(records)})
+        # 获取分组的节目列表
+        shows = config_db.get_change_records_by_shows(limit=200)
+        return jsonify({"shows": shows, "total": len(shows)})
     except Exception as e:
         app.logger.error(f"Failed to get change records: {e}")
+        return jsonify({"shows": [], "total": 0, "error": str(e)}), 500
+
+
+@app.route("/api/change-records/<show_name>")
+def get_change_records_by_show(show_name):
+    try:
+        records = config_db.get_change_records_by_show_name(show_name, limit=100)
+        return jsonify({"records": records, "total": len(records)})
+    except Exception as e:
+        app.logger.error(f"Failed to get change records for show {show_name}: {e}")
         return jsonify({"records": [], "total": 0, "error": str(e)}), 500
 
 

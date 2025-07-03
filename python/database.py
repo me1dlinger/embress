@@ -152,6 +152,8 @@ class ConfigDB:
         )
         self._add_column_if_missing("scan_history", "deleted_nfo INTEGER DEFAULT 0")
         self._add_column_if_missing("scan_history", "scan_type TEXT")
+        self._add_column_if_missing("scan_history", "renamed_audio INTEGER DEFAULT 0")
+        self._add_column_if_missing("scan_history", "renamed_picture INTEGER DEFAULT 0")
 
     def _init_change_record_table(self):
         conn, cursor = self._get_connection()
@@ -297,8 +299,8 @@ class ConfigDB:
                 """
                 INSERT INTO scan_history
                 (timestamp, status, scan_type, message, processed, renamed,
-                renamed_subtitle, deleted_nfo, target, data)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                renamed_subtitle, renamed_audio, renamed_picture, deleted_nfo, target, data)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """,
                 (
                     result.get("timestamp"),
@@ -308,6 +310,8 @@ class ConfigDB:
                     result.get("processed", 0),
                     result.get("renamed_video", 0),
                     result.get("renamed_subtitle", 0),
+                    result.get("renamed_audio", 0),
+                    result.get("renamed_picture", 0),
                     result.get("deleted_nfo", 0),
                     result.get("target"),
                     json.dumps(result, ensure_ascii=False),
@@ -396,40 +400,55 @@ class ConfigDB:
                 )
         conn.commit()
 
-    def get_change_records(self, limit: int = 200) -> List[Dict]:
-        """从数据库获取变更记录"""
+    def get_change_records_by_shows(self, limit: int = 200) -> List[Dict]:
         conn, cursor = self._get_connection()
         cursor.execute(
             """
-            SELECT path, original, new, type, status, error, timestamp, 
-                media_type, show_name, season_name, rollback, season_dir
+            SELECT 
+                show_name,
+                COUNT(*) as record_count,
+                MAX(timestamp) as latest_timestamp,
+                GROUP_CONCAT(DISTINCT type) as types
             FROM change_record 
             WHERE status = 'success'
-            ORDER BY timestamp DESC 
+            GROUP BY show_name
+            ORDER BY latest_timestamp DESC 
             LIMIT ?
             """,
             (limit,),
         )
 
-        records = []
+        columns = [desc[0] for desc in cursor.description]
+        shows = []
         for row in cursor.fetchall():
-            records.append(
-                {
-                    "path": row[0],
-                    "original": row[1],
-                    "new": row[2],
-                    "type": row[3],
-                    "status": row[4],
-                    "error": row[5],
-                    "timestamp": row[6],
-                    "media_type": row[7],
-                    "show": row[8],
-                    "season": row[9],
-                    "rollback": bool(row[10]),
-                    "season_dir": row[11],
-                }
+            show_data = dict(zip(columns, row))
+            show_data["types"] = (
+                show_data["types"].split(",") if show_data["types"] else []
             )
+            shows.append(show_data)
 
+        conn.close()
+        return shows
+
+    def get_change_records_by_show_name(
+        self, show_name: str, limit: int = 100
+    ) -> List[Dict]:
+        conn, cursor = self._get_connection()
+        cursor.execute(
+            """
+            SELECT path, original, new, type, status, error, timestamp,
+                media_type, show_name, season_name, rollback, season_dir
+            FROM change_record 
+            WHERE status = 'success' AND show_name = ?
+            ORDER BY timestamp DESC 
+            LIMIT ?
+            """,
+            (show_name, limit),
+        )
+
+        columns = [desc[0] for desc in cursor.description]
+        records = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        conn.close()
         return records
 
     def record_exists(

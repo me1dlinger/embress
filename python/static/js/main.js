@@ -24,7 +24,9 @@ new Vue({
     historyLoading: false,
 
     // 变更记录
-    changeRecords: [],
+    showsChangeList: [],
+    selectedShow: null,
+    selectedShowRecords: [],
     recordsLoading: false,
 
     // 日志相关
@@ -299,12 +301,16 @@ new Vue({
       this.recordsLoading = true;
 
       try {
-        const data = await this.auth_fetch("/api/change-records");
-
-        this.changeRecords = data.records || [];
+        if (this.selectedShow) {
+          // 加载特定节目的记录
+          await this.loadShowRecords(this.selectedShow);
+        } else {
+          // 加载节目列表
+          const data = await this.auth_fetch("/api/change-records");
+          this.showsChangeList = data.shows || [];
+        }
       } catch (error) {
         if (error.status === 401) {
-          // 鉴权失败逻辑
           this.isAuthenticated = false;
           localStorage.removeItem("access_key");
           this.authError = "未授权或密钥无效";
@@ -322,12 +328,68 @@ new Vue({
             "bi-x-circle"
           );
         }
-        this.changeRecords = [];
+        this.showsChangeList = [];
+        this.selectedShowRecords = [];
+      } finally {
+        this.recordsLoading = false;
+      }
+    },
+    async selectShow(showName) {
+      this.selectedShow = showName;
+      await this.loadShowRecords(showName);
+    },
+    async loadShowRecords(showName) {
+      this.recordsLoading = true;
+
+      try {
+        const data = await this.auth_fetch(
+          `/api/change-records/${encodeURIComponent(showName)}`
+        );
+        this.selectedShowRecords = data.records || [];
+      } catch (error) {
+        this.showModalComponent(
+          "error",
+          "加载失败",
+          "加载节目记录失败",
+          "bi-x-circle"
+        );
+        this.selectedShowRecords = [];
       } finally {
         this.recordsLoading = false;
       }
     },
 
+    // 返回节目列表
+    goBackToShows() {
+      this.selectedShow = null;
+      this.selectedShowRecords = [];
+      this.loadChangeRecords();
+    },
+
+    // 获取类型标签
+    getTypeLabel(type) {
+      const typeMap = {
+        rename: "文件重命名",
+        subtitle_rename: "字幕重命名",
+        audio_rename: "音频重命名",
+        picture_rename: "图片重命名",
+        nfo_delete: "NFO删除",
+      };
+      return typeMap[type] || type;
+    },
+
+    // 格式化日期
+    formatDate(timestamp) {
+      if (!timestamp) return "";
+      const date = new Date(timestamp);
+      return date.toLocaleString("zh-CN", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    },
     // 加载日志文件列表
     async loadLogFiles() {
       this.logsLoading = true;

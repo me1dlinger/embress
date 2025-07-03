@@ -9,7 +9,7 @@ import os
 import re
 import json
 import logging
-import datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Set, Union
 from database import config_db
@@ -30,6 +30,8 @@ STATUS_WHITELIST = "whitelisted"
 STATUS_UNPROCESSED = "unprocessed"
 
 SUBTITLE_EXTS: Set[str] = {".ass", ".srt", ".vtt", ".sub"}
+AUDIO_EXTS: Set[str] = {".mka", ".flac"}
+PICTURE_EXTS: Set[str] = {".jpg", ".png", ".jpeg"}
 
 SEASON_PATTERNS = [
     re.compile(r"season[ _\-]?(\d{1,2})", re.I),
@@ -211,7 +213,7 @@ class EmbressRenamer:
         old_stem = file_path.stem
         new_stem = Path(new_name).stem
         new_file_path = file_path.parent / new_name
-
+        ASSOCIATED_EXTS = set().union(SUBTITLE_EXTS, AUDIO_EXTS, PICTURE_EXTS)
         if file_path != new_file_path and not new_file_path.exists():
             try:
                 file_path.rename(new_file_path)
@@ -235,37 +237,52 @@ class EmbressRenamer:
                 )
                 self.logger.error(f"重命名失败: {e}")
                 return changes
-        for sub in file_path.parent.iterdir():
-            if not sub.is_file() or sub.suffix.lower() not in SUBTITLE_EXTS:
+        for associated_file in file_path.parent.iterdir():
+            if not associated_file.is_file():
                 continue
-            if not re.match(re.escape(old_stem) + r"(\.|$)", sub.stem, re.I):
+            ext = associated_file.suffix.lower()
+            if ext not in ASSOCIATED_EXTS:
                 continue
-
-            remainder = sub.name[len(old_stem) :]
-            new_sub_name = f"{new_stem}{remainder}"
-            new_sub_path = sub.parent / new_sub_name
-
-            if new_sub_path.exists():
+            if not re.match(
+                re.escape(old_stem) + r"(\.|$)", associated_file.stem, re.I
+            ):
                 continue
 
+            remainder = associated_file.name[len(old_stem) :]
+            new_assoc_name = f"{new_stem}{remainder}"
+            new_assoc_path = associated_file.parent / new_assoc_name
+            record_type = "subtitle_rename"
+            if ext in SUBTITLE_EXTS:
+                record_type = "subtitle_rename"
+            elif ext in AUDIO_EXTS:
+                record_type = "audio_rename"
+            else:
+                record_type = "picture_rename"
+            if new_assoc_path.exists():
+                continue
             try:
-                sub.rename(new_sub_path)
+                associated_file.rename(new_assoc_path)
+
                 changes.append(
                     {
-                        "type": "subtitle_rename",
-                        "original": sub.name,
-                        "new": new_sub_name,
+                        "type": record_type,
+                        "original": associated_file.name,
+                        "new": new_assoc_name,
                         "status": "success",
                     }
                 )
                 if original_records:
                     for record in original_records:
                         if (
-                            record.get("type") == "subtitle_rename"
+                            (
+                                record.get("type") == "subtitle_rename"
+                                or record.get("type") == "audio_rename"
+                                or record.get("type") == "picture_rename"
+                            )
                             and record.get("status") == "success"
                             and record.get("rollback") is not True
-                            and record.get("new") == sub.name
-                            and record.get("original") == new_sub_name
+                            and record.get("new") == associated_file.name
+                            and record.get("original") == new_assoc_name
                         ):
                             record["rollback"] = True
                             break
@@ -273,9 +290,9 @@ class EmbressRenamer:
             except Exception as e:
                 changes.append(
                     {
-                        "type": "subtitle_rename",
-                        "original": sub.name,
-                        "new": new_sub_name,
+                        "type": record_type,
+                        "original": associated_file.name,
+                        "new": new_assoc_name,
                         "status": "failed",
                         "error": str(e),
                     }
@@ -288,6 +305,7 @@ class EmbressRenamer:
         old_stem = file_path.stem
         new_stem = Path(new_name).stem
         new_file_path = file_path.parent / new_name
+        ASSOCIATED_EXTS = set().union(SUBTITLE_EXTS, AUDIO_EXTS, PICTURE_EXTS)
         if file_path != new_file_path and not new_file_path.exists():
             try:
                 file_path.rename(new_file_path)
@@ -313,25 +331,35 @@ class EmbressRenamer:
                 self.logger.error(f"重命名失败: {e}")
                 return changes
 
-        for sub in file_path.parent.iterdir():
-            if not sub.is_file() or sub.suffix.lower() not in SUBTITLE_EXTS:
+        for associated_file in file_path.parent.iterdir():
+            if not associated_file.is_file():
                 continue
-            if not re.match(re.escape(old_stem) + r"(\.|$)", sub.stem, re.I):
+            ext = associated_file.suffix.lower()
+            if ext not in ASSOCIATED_EXTS:
                 continue
-
-            remainder = sub.name[len(old_stem) :]
-            new_sub_name = f"{new_stem}{remainder}"
-            new_sub_path = sub.parent / new_sub_name
-            if new_sub_path.exists():
+            if not re.match(
+                re.escape(old_stem) + r"(\.|$)", associated_file.stem, re.I
+            ):
                 continue
-
+            record_type = "subtitle_rename"
+            if ext in SUBTITLE_EXTS:
+                record_type = "subtitle_rename"
+            elif ext in AUDIO_EXTS:
+                record_type = "audio_rename"
+            else:
+                record_type = "picture_rename"
+            remainder = associated_file.name[len(old_stem) :]
+            new_assoc_name = f"{new_stem}{remainder}"
+            new_assoc_path = associated_file.parent / new_assoc_name
+            if new_assoc_path.exists():
+                continue
             try:
-                sub.rename(new_sub_path)
+                associated_file.rename(new_assoc_path)
                 changes.append(
                     {
-                        "type": "subtitle_rename",
-                        "original": sub.name,
-                        "new": new_sub_name,
+                        "type": record_type,
+                        "original": associated_file.name,
+                        "new": new_assoc_name,
                         "status": "success",
                         "error": None,
                     }
@@ -339,9 +367,9 @@ class EmbressRenamer:
             except Exception as e:
                 changes.append(
                     {
-                        "type": "subtitle_rename",
-                        "original": sub.name,
-                        "new": new_sub_name,
+                        "type": record_type,
+                        "original": associated_file.name,
+                        "new": new_assoc_name,
                         "status": "failed",
                         "error": str(e),
                     }
@@ -368,8 +396,8 @@ class EmbressRenamer:
 
         if not latest_map:
             return []
-
         # --- 统一处理字幕 & NFO -------------------------------------------------
+        ASSOCIATED_EXTS = set().union(SUBTITLE_EXTS, AUDIO_EXTS, PICTURE_EXTS)
         changes: List[Dict] = []
         for orig, (latest_new, _) in latest_map.items():  # ← 一个 for 里搞定两件事
             orig_stem = Path(orig).stem
@@ -378,19 +406,27 @@ class EmbressRenamer:
             for item in season_dir.iterdir():
                 if not item.is_file():
                     continue
-                if item.suffix.lower() in SUBTITLE_EXTS and re.match(
+                ext = item.suffix.lower()
+                if ext in ASSOCIATED_EXTS and re.match(
                     rf"{re.escape(orig_stem)}(\.|$)", item.stem, re.I
                 ):
                     remainder = item.name[len(orig_stem) :]
                     new_name = f"{new_stem}{remainder}"
                     new_path = item.with_name(new_name)
-
+                    record_type = "subtitle_rename"
+                    if ext in SUBTITLE_EXTS:
+                        record_type = "subtitle_rename"
+                    elif ext in AUDIO_EXTS:
+                        record_type = "audio_rename"
+                    else:
+                        record_type = "picture_rename"
                     if not new_path.exists():
                         try:
+
                             item.rename(new_path)
                             changes.append(
                                 {
-                                    "type": "subtitle_rename",
+                                    "type": record_type,
                                     "original": item.name,
                                     "new": new_name,
                                     "status": "success",
@@ -400,7 +436,7 @@ class EmbressRenamer:
                         except Exception as e:
                             changes.append(
                                 {
-                                    "type": "subtitle_rename",
+                                    "type": record_type,
                                     "original": item.name,
                                     "new": new_name,
                                     "status": "failed",
@@ -416,7 +452,7 @@ class EmbressRenamer:
     ):
         processed_changes = []
         for c in changes:
-            c["timestamp"] = datetime.datetime.now().isoformat()
+            c["timestamp"] = datetime.now().isoformat()
             c["media_type"] = media_type
             c["path"] = str(
                 (season_dir / c.get("new", c.get("original", ""))).absolute()
@@ -437,6 +473,7 @@ class EmbressRenamer:
 
     def _write_all_change_records(self, season_dir):
         rename_record_path = season_dir / "rename_record.json"
+        print(rename_record_path)
         try:
             new_records = config_db.get_season_change_records(str(season_dir))
         except Exception as e:
@@ -478,7 +515,13 @@ class EmbressRenamer:
 
     @staticmethod
     def _count_success_by_type(changes: List[Dict]) -> Dict[str, int]:
-        stats = {"rename": 0, "subtitle_rename": 0, "nfo_delete": 0}
+        stats = {
+            "rename": 0,
+            "subtitle_rename": 0,
+            "audio_rename": 0,
+            "picture_rename": 0,
+            "nfo_delete": 0,
+        }
         for c in changes:
             t, s = c.get("type"), c.get("status")
             if t in stats and s == "success":
@@ -496,6 +539,196 @@ class EmbressRenamer:
             }
         ]
 
+    def _dedup_latest(self, records: list[dict]) -> list[dict]:
+        latest_map = {}
+        for rec in records:
+            key = rec.get("path") or rec.get("new")  # 两者理论相同，这里选 path 更稳
+            ts = rec.get("timestamp", "")
+            if not key:
+                continue
+            if key not in latest_map or ts > latest_map[key]["timestamp"]:
+                latest_map[key] = rec
+        return list(latest_map.values())
+
+    def scan_and_rollback(self, sub_path: str):
+        self.logger.info(f"Start rollback Season: {sub_path}")
+        season_dir = Path(MEDIA_PATH) / sub_path
+        rollback_record_path = season_dir / "rollback.json"
+        media_type = self._extract_media_type(season_dir)
+        if not season_dir.exists():
+            result = {"success": False, "message": "Season path not found "}
+            code = 200
+            return {"result": result, "code": code}
+        try:
+            original_records = config_db.get_season_change_records(str(season_dir))
+        except Exception as e:
+            self.logger.error(f"Failed to retrieve change records: {e}")
+            result = {"records": [], "total": 0, "error": str(e)}
+            code = 500
+            return {"result": result, "code": code}
+        rollback_results = []
+        original_records = self._dedup_latest(original_records)
+        nfo_changes = []
+        rolled_back_file_cnt = 0
+        rolled_back_sub_cnt = 0
+        rolled_back_audio_cnt = 0
+        rolled_back_picture_cnt = 0
+        for rec in original_records:
+            if (
+                rec.get("type") != "rename"
+                or rec.get("status") != "success"
+                or rec.get("rollback") is True
+            ):
+                continue
+            cur_path = Path(rec["path"])
+            original_name = rec["original"]
+            if not cur_path.exists():
+                rollback_results.append(
+                    {
+                        "type": "rollback",
+                        "original": rec["new"],
+                        "new": original_name,
+                        "status": "failed",
+                        "error": "文件不存在",
+                        "timestamp": datetime.now().isoformat(),
+                        "path": rec["path"],
+                    }
+                )
+                continue
+            try:
+                changes = self._rollback_file_and_subtitles(
+                    cur_path, original_name, original_records
+                )
+
+                if self._count_success_renames(changes):
+                    rolled_back_file_cnt += 1
+                    rollback_result = {
+                        "type": "rollback",
+                        "original": rec["new"],
+                        "new": original_name,
+                        "status": "rolled_back",
+                        "timestamp": datetime.now().isoformat(),
+                        "path": str((cur_path.parent / original_name).absolute()),
+                    }
+                    rollback_results.append(rollback_result)
+                    rec["rollback"] = True
+                    config_db.update_change_record_rollback(
+                        rec["path"], rec["original"], True
+                    )
+                    for change in changes:
+                        if (
+                            change.get("status") == "success"
+                            and change.get("type") != "rename"
+                        ):
+                            rollback_type = "subtitle_rollback"
+                            if change.get("type") == "subtitle_rename":
+                                rollback_type = "subtitle_rollback"
+                                rolled_back_sub_cnt += 1
+                            elif change.get("type") == "audio_rename":
+                                rollback_type = "audio_rollback"
+                                rolled_back_audio_cnt += 1
+                            elif change.get("type") == "picture_rename":
+                                rollback_type = "picture_rollback"
+                                rolled_back_picture_cnt += 1
+                            rollback_result = {
+                                "type": rollback_type,
+                                "original": change["original"],
+                                "new": change["new"],
+                                "status": "rolled_back",
+                                "timestamp": datetime.now().isoformat(),
+                                "path": str(
+                                    (cur_path.parent / change["new"]).absolute()
+                                ),
+                            }
+                            rollback_results.append(rollback_result)
+                            subtitle_path = str(
+                                (cur_path.parent / change["original"]).absolute()
+                            )
+                            config_db.update_change_record_rollback(
+                                subtitle_path, change["new"], True
+                            )
+                    nfo_changes = self._delete_old_nfo(
+                        season_dir, Path(rec["new"]).stem, nfo_changes
+                    )
+                else:
+                    rollback_results.append(
+                        {
+                            "type": "rollback",
+                            "original": rec["new"],
+                            "new": original_name,
+                            "status": "failed",
+                            "error": "重命名失败",
+                            "timestamp": datetime.now().isoformat(),
+                            "path": rec["path"],
+                        }
+                    )
+            except Exception as exc:
+                self.logger.exception("Rollback failed")
+                rollback_results.append(
+                    {
+                        "type": "rollback",
+                        "original": rec["new"],
+                        "new": original_name,
+                        "status": "failed",
+                        "error": str(exc),
+                        "timestamp": datetime.now().isoformat(),
+                        "path": rec["path"],
+                    }
+                )
+        try:
+            nfo_delete_records = self._get_new_change_record(
+                season_dir, media_type, nfo_changes
+            )
+            try:
+                config_db.add_change_records(nfo_delete_records)
+            except Exception as e:
+                self.logger.error(f"Failed to save and delete records to database: {e}")
+            self._write_all_change_records(season_dir)
+        except Exception as exc:
+            self.logger.exception("Failed to update the rename_record.json")
+        if rollback_results:
+            existing = []
+            if rollback_record_path.exists():
+                try:
+                    existing = json.loads(
+                        rollback_record_path.read_text(encoding="utf-8")
+                    )
+                except Exception:
+                    pass
+            rollback_result = {
+                "status": "completed",
+                "processed": rolled_back_file_cnt
+                + rolled_back_sub_cnt
+                + rolled_back_picture_cnt
+                + rolled_back_audio_cnt,
+                "renamed": rolled_back_file_cnt,
+                "renamed_subtitle": rolled_back_sub_cnt,
+                "renamed_audio": rolled_back_audio_cnt,
+                "renamed_picture": rolled_back_picture_cnt,
+                "deleted_nfo": len(nfo_delete_records),
+                "timestamp": datetime.now().isoformat(),
+                "target": sub_path,
+                "scan_type": "rollback",
+            }
+            config_db.add_scan_history(rollback_result)
+            try:
+                all_records = existing + rollback_results
+                rollback_record_path.write_text(
+                    json.dumps(all_records, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+            except Exception as exc:
+                self.logger.exception("Writing rollback.json failed")
+
+        result = {
+            "success": True,
+            "rolled_back_file": rolled_back_file_cnt,
+            "rolled_back_sub": rolled_back_sub_cnt,
+            "results": rollback_results,
+        }
+        code = 200
+        return {"result": result, "code": code}
+
     def scan_and_rename(self, sub_path: Optional[str] = None) -> Dict:
         self.current_sub_path = sub_path
         self.logger.info(
@@ -504,6 +737,8 @@ class EmbressRenamer:
         processed_files_list: List[Dict] = []
         total, renamed = 0, 0
         renamed_subtitle = 0
+        renamed_audio = 0
+        renamed_picture = 0
         deleted_nfo = 0
         video_exts = {
             ".mkv",
@@ -529,7 +764,7 @@ class EmbressRenamer:
                 "processed": 0,
                 "renamed": 0,
                 "target": str(sub_path or "ALL"),
-                "timestamp": datetime.datetime.now().isoformat(),
+                "timestamp": datetime.now().isoformat(),
             }
 
         if self._is_season_dir(root_path):
@@ -537,7 +772,7 @@ class EmbressRenamer:
             self.logger.info(
                 f"Processing season directory: {root_path} (Media type: {media_type})"
             )
-            p_list, t_inc, r_inc, s_inc, n_inc = self._scan_single_season(
+            p_list, t_inc, r_inc, s_inc, a_inc, p_inc, n_inc = self._scan_single_season(
                 season_dir=root_path,
                 parent_show=root_path.parent,
                 video_exts=video_exts,
@@ -547,6 +782,8 @@ class EmbressRenamer:
             total += t_inc
             renamed += r_inc
             renamed_subtitle += s_inc
+            renamed_audio += a_inc
+            renamed_picture += p_inc
             deleted_nfo += n_inc
         elif self._is_show_dir(root_path):
             self.logger.info(f"Processing show directory: {root_path}")
@@ -556,31 +793,39 @@ class EmbressRenamer:
                     f"Processing season: {season_dir} (Media type: {media_type})"
                 )
                 if season_dir.is_dir() and self._is_season_dir(season_dir):
-                    p_list, t_inc, r_inc, s_inc, n_inc = self._scan_single_season(
-                        season_dir=season_dir,
-                        parent_show=root_path,
-                        video_exts=video_exts,
-                        media_type_name=media_type,
+                    p_list, t_inc, r_inc, s_inc, a_inc, p_inc, n_inc = (
+                        self._scan_single_season(
+                            season_dir=season_dir,
+                            parent_show=root_path,
+                            video_exts=video_exts,
+                            media_type_name=media_type,
+                        )
                     )
                     processed_files_list.extend(p_list)
                     total += t_inc
                     renamed += r_inc
                     renamed_subtitle += s_inc
+                    renamed_audio += a_inc
+                    renamed_picture += p_inc
                     deleted_nfo += n_inc
         else:
             self.logger.info(f"Processing base directory: {root_path}")
             for show_dir, season_dir in self._iter_season_dirs(root_path):
                 media_type = self._extract_media_type(season_dir)
-                p_list, t_inc, r_inc, s_inc, n_inc = self._scan_single_season(
-                    season_dir=season_dir,
-                    parent_show=show_dir,
-                    video_exts=video_exts,
-                    media_type_name=media_type,
+                p_list, t_inc, r_inc, s_inc, a_inc, p_inc, n_inc = (
+                    self._scan_single_season(
+                        season_dir=season_dir,
+                        parent_show=show_dir,
+                        video_exts=video_exts,
+                        media_type_name=media_type,
+                    )
                 )
                 processed_files_list.extend(p_list)
                 total += t_inc
                 renamed += r_inc
                 renamed_subtitle += s_inc
+                renamed_audio += a_inc
+                renamed_picture += p_inc
                 deleted_nfo += n_inc
         unrenamed_files = [
             {"path": f["path"]}
@@ -595,21 +840,24 @@ class EmbressRenamer:
                 self.logger.info(f"开始保存记录")
                 config_db.add_change_records(self._pending_change_records)
                 self.logger.info("保存成功")
-                self._pending_change_records = []
-                self._seasons_to_update = set()
+
             except Exception as e:
                 self.logger.error("批量保存变更记录失败: %s", e)
             for season_dir in self._seasons_to_update:
                 self._write_all_change_records(season_dir)
+            self._pending_change_records = []
+            self._seasons_to_update = set()
         return {
             "status": "completed",
             "processed": total,
             "renamed": renamed,
             "renamed_subtitle": renamed_subtitle,
+            "renamed_audio": renamed_audio,
+            "renamed_picture": renamed_picture,
             "deleted_nfo": deleted_nfo,
             "unrenamed_count": len(unrenamed_files),
             "unrenamed_files": unrenamed_files,
-            "timestamp": datetime.datetime.now().isoformat(),
+            "timestamp": datetime.now().isoformat(),
             "target": str(sub_path or "ALL"),
         }
 
@@ -682,7 +930,14 @@ class EmbressRenamer:
         media_type_name: str,
     ) -> Tuple[List[Dict], int, int, int, int]:
         processed_files_list: List[Dict] = []
-        total, renamed, renamed_sub, deleted_nfo = 0, 0, 0, 0
+        total, renamed, renamed_sub, deleted_nfo, renamed_audio, renamed_picture = (
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        )
         processed_files = self._season_processed_set(season_dir)
         season_num_hint = self._get_season_from_path(season_dir)
         season_changes: List[Dict] = []
@@ -719,8 +974,18 @@ class EmbressRenamer:
             counts = self._count_success_by_type(season_changes)
             renamed = counts.get("rename", 0)
             renamed_sub = counts.get("subtitle_rename", 0)
+            renamed_audio = counts.get("audio_rename", 0)
+            renamed_picture = counts.get("picture_rename", 0)
             deleted_nfo = counts.get("nfo_delete", 0)
-        return processed_files_list, total, renamed, renamed_sub, deleted_nfo
+        return (
+            processed_files_list,
+            total,
+            renamed,
+            renamed_sub,
+            renamed_audio,
+            renamed_picture,
+            deleted_nfo,
+        )
 
     def _process_episode_file(
         self,

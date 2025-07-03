@@ -285,26 +285,55 @@
    margin: 0;
  }
 
- /* 变更记录样式 */
- .record-item {
-   border-left: 3px solid var(--success);
-   padding-left: 15px;
-   margin-bottom: 15px;
-   transition: var(--transition);
-   background-color: white;
-   border-radius: 8px;
-   padding: 15px;
-   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
- }
+/* 变更记录样式 */
+.record-item {
+  border-left: 3px solid var(--success);
+  padding-left: 15px;
+  margin-bottom: 15px;
+  transition: var(--transition);
+  background-color: white;
+  border-radius: 8px;
+  padding: 15px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
 
- .record-item.failed {
-   border-left-color: var(--error);
- }
+.record-item.failed {
+  border-left-color: var(--error);
+}
 
- .record-item:hover {
-   transform: translateX(5px);
-   box-shadow: 0 5px 12px rgba(0, 0, 0, 0.08);
- }
+.record-item:hover {
+  transform: translateX(5px);
+  box-shadow: 0 5px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* 节目列表样式 */
+.show-item {
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 15px;
+  background-color: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.show-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+  border-color: var(--primary);
+}
+
+.type-badges .badge {
+  font-size: 0.75em;
+}
+
+.gap-2 {
+  gap: 0.5rem;
+}
+
+.gap-3 {
+  gap: 1rem;
+}
 
  /* 历史记录卡片 */
  .history-card {
