@@ -360,11 +360,11 @@ def init_change_record():
     try:
         if config_db._init_change_record_table():
             app.logger.info(
-                "The change_decord table already exists, skip initialization"
+                "The change_record table already exists, skip initialization"
             )
         else:
             app.logger.info(
-                "The change_decord table does not exist. Create a table and migrate historical data"
+                "The change_record table does not exist. Create a table and migrate historical data"
             )
 
             media_path = Path(MEDIA_PATH)

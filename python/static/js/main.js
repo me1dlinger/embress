@@ -1087,12 +1087,10 @@ new Vue({
       if (this.newWhitelistItems.length === 0) return;
       this.addToWhitelistLoading = true;
       try {
-        const response = await this.auth_fetch("/api/whitelist", {
+        const result = await this.auth_fetch("/api/whitelist", {
           method: "POST",
           body: JSON.stringify({ items: this.getNewWhitelistItems() }),
         });
-        const result = await response.json();
-
         if (result.success) {
           this.newWhitelistItems = [];
           this.loadSystemStatus();
