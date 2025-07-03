@@ -405,13 +405,13 @@ class ConfigDB:
         cursor.execute(
             """
             SELECT 
-                show_name,
+                media_type,show_name,
                 COUNT(*) as record_count,
                 MAX(timestamp) as latest_timestamp,
                 GROUP_CONCAT(DISTINCT type) as types
             FROM change_record 
             WHERE status = 'success'
-            GROUP BY show_name
+            GROUP BY media_type,show_name
             ORDER BY latest_timestamp DESC 
             LIMIT ?
             """,
@@ -430,8 +430,8 @@ class ConfigDB:
         conn.close()
         return shows
 
-    def get_change_records_by_show_name(
-        self, show_name: str, limit: int = 100
+    def get_change_records_by_show(
+        self, media_type: str, show_name: str, limit: int = 100
     ) -> List[Dict]:
         conn, cursor = self._get_connection()
         cursor.execute(
@@ -439,11 +439,11 @@ class ConfigDB:
             SELECT path, original, new, type, status, error, timestamp,
                 media_type, show_name, season_name, rollback, season_dir
             FROM change_record 
-            WHERE status = 'success' AND show_name = ?
+            WHERE status = 'success' AND media_type = ? AND show_name = ? 
             ORDER BY timestamp DESC 
             LIMIT ?
             """,
-            (show_name, limit),
+            (media_type, show_name, limit),
         )
 
         columns = [desc[0] for desc in cursor.description]

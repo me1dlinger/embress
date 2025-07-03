@@ -25,10 +25,21 @@ new Vue({
 
     // 变更记录
     showsChangeList: [],
-    selectedShow: null,
+    selectedShow: {
+      media_type: null,
+      show_name: null,
+    },
     selectedShowRecords: [],
+    selectedTypeFilter: "all",
     recordsLoading: false,
-
+    groupBy: "type",
+    typeOrder: [
+      "rename",
+      "subtitle_rename",
+      "audio_rename",
+      "picture_rename",
+      "nfo_delete",
+    ],
     // 日志相关
     logFiles: [],
     selectedLogFile: null,
@@ -70,13 +81,208 @@ new Vue({
     modalIcon: "bi-info-circle",
     hasCancel: false,
     confirmCallback: null,
+    toasts: [],
+    toastId: 0,
   },
 
   mounted() {
     this.autoAuthenticate();
   },
+  computed: {
+    // 按类型统计记录数量
+    recordTypeStats() {
+      const stats = {};
+      this.selectedShowRecords.forEach((record) => {
+        stats[record.type] = (stats[record.type] || 0) + 1;
+      });
+      const orderedStats = {};
+      this.typeOrder.forEach((type) => {
+        if (stats[type]) {
+          orderedStats[type] = stats[type];
+        }
+      });
+      return orderedStats;
+    },
+    seasonStats() {
+      const stats = {};
+      this.selectedShowRecords.forEach((record) => {
+        const seasonName = record.season_name || "未知季度";
+        stats[seasonName] = (stats[seasonName] || 0) + 1;
+      });
+      const sortedStats = {};
+      Object.keys(stats)
+        .sort((a, b) => {
+          // 自定义排序逻辑
+          return this.compareSeasonNames(a, b);
+        })
+        .forEach((season) => {
+          sortedStats[season] = stats[season];
+        });
 
+      return sortedStats;
+    },
+    // 按类型分组的记录
+    groupedRecordsByType() {
+      const groups = {};
+      this.selectedShowRecords.forEach((record) => {
+        if (!groups[record.type]) {
+          groups[record.type] = [];
+        }
+        groups[record.type].push(record);
+      });
+
+      // 按时间排序每个分组
+      Object.keys(groups).forEach((type) => {
+        groups[type].sort(
+          (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
+        );
+      });
+
+      const orderedGroups = {};
+      this.typeOrder.forEach((type) => {
+        if (groups[type]) {
+          orderedGroups[type] = groups[type];
+        }
+      });
+
+      return orderedGroups;
+    },
+    groupedRecordsBySeason() {
+      const groups = {};
+      this.selectedShowRecords.forEach((record) => {
+        const seasonName = record.season_name || "未知季度";
+        if (!groups[seasonName]) {
+          groups[seasonName] = [];
+        }
+        groups[seasonName].push(record);
+      });
+
+      // 按时间排序每个分组
+      Object.keys(groups).forEach((season) => {
+        groups[season].sort(
+          (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
+        );
+      });
+      const sortedGroups = {};
+      Object.keys(groups)
+        .sort((a, b) => {
+          return this.compareSeasonNames(a, b);
+        })
+        .forEach((season) => {
+          sortedGroups[season] = groups[season];
+        });
+
+      return sortedGroups;
+    },
+    groupedRecords() {
+      if (this.groupBy === "season") {
+        return this.groupedRecordsBySeason;
+      } else {
+        return this.groupedRecordsByType;
+      }
+    },
+    // 筛选后的记录
+    filteredRecords() {
+      if (this.selectedTypeFilter === "all") {
+        return this.selectedShowRecords;
+      }
+      if (this.groupBy === "season") {
+        return this.selectedShowRecords.filter(
+          (record) => record.season_name === this.selectedTypeFilter
+        );
+      } else {
+        return this.selectedShowRecords.filter(
+          (record) => record.type === this.selectedTypeFilter
+        );
+      }
+    },
+  },
   methods: {
+    showToast(
+      message,
+      type = "info",
+      title = null,
+      duration = 3000,
+      callback = null
+    ) {
+      const id = ++this.toastId;
+      const toast = {
+        id,
+        message,
+        type,
+        title,
+        duration,
+        callback,
+        visible: false,
+      };
+
+      this.toasts.push(toast);
+
+      setTimeout(() => {
+        const toastIndex = this.toasts.findIndex((t) => t.id === id);
+        if (toastIndex !== -1) {
+          this.toasts[toastIndex].visible = true;
+        }
+      }, 50);
+
+      setTimeout(() => {
+        this.removeToast(id);
+      }, duration);
+
+      return id;
+    },
+    removeToast(id) {
+      const toastIndex = this.toasts.findIndex((t) => t.id === id);
+      if (toastIndex !== -1) {
+        const toast = this.toasts[toastIndex];
+
+        // 执行回调
+        if (toast.callback && typeof toast.callback === "function") {
+          toast.callback();
+        }
+
+        this.toasts[toastIndex].visible = false;
+        setTimeout(() => {
+          const index = this.toasts.findIndex((t) => t.id === id);
+          if (index !== -1) {
+            this.toasts.splice(index, 1);
+          }
+        }, 300);
+      }
+    },
+    getToastIcon(type) {
+      const icons = {
+        success: "bi-check-circle-fill",
+        error: "bi-x-circle-fill",
+        warning: "bi-exclamation-triangle-fill",
+        info: "bi-info-circle-fill",
+      };
+      return icons[type] || icons.info;
+    },
+    showSuccess(message, title = null, duration = 2000, callback = null) {
+      return this.showToast(message, "success", title, duration, callback);
+    },
+
+    showError(message, title = null, duration = 5000, callback = null) {
+      return this.showToast(message, "error", title, duration, callback);
+    },
+
+    showWarning(message, title = null, duration = 4000, callback = null) {
+      return this.showToast(message, "warning", title, duration, callback);
+    },
+
+    showInfo(message, title = null, duration = 3000, callback = null) {
+      return this.showToast(message, "info", title, duration, callback);
+    },
+    clearAllToasts() {
+      this.toasts.forEach((toast) => {
+        toast.visible = false;
+      });
+
+      setTimeout(() => {
+        this.toasts = [];
+      }, 300);
+    },
     async auth_fetch(url, options = {}) {
       const accessKey = localStorage.getItem("access_key");
       const defaultHeaders = {
@@ -223,12 +429,7 @@ new Vue({
           this.loadHistory();
           this.loadChangeRecords();
           this.loadSystemStatus();
-          this.showModalComponent(
-            "success",
-            "扫描成功",
-            "文件扫描已完成，结果已更新。",
-            "bi-check-circle"
-          );
+          this.showSuccess("文件扫描已完成，结果已更新。", "扫描成功");
         } else {
           this.showModalComponent(
             "error",
@@ -295,19 +496,68 @@ new Vue({
         this.historyLoading = false;
       }
     },
+    setGroupBy(groupBy) {
+      this.groupBy = groupBy;
+      // 切换分组方式时重置筛选
+      this.selectedTypeFilter = "all";
+    },
+    compareSeasonNames(a, b) {
+      if (a === "未知季度" && b !== "未知季度") return 1;
+      if (b === "未知季度" && a !== "未知季度") return -1;
+      if (a === "未知季度" && b === "未知季度") return 0;
 
-    // 加载变更记录
+      const extractNumber = (str) => {
+        const match = str.match(/第?(\d+)[季部]/);
+        if (match) {
+          return parseInt(match[1]);
+        }
+        const seasonMatch = str.match(/[Ss]eason\s*(\d+)|[Ss](\d+)/);
+        if (seasonMatch) {
+          return parseInt(seasonMatch[1] || seasonMatch[2]);
+        }
+        return str;
+      };
+
+      const numA = extractNumber(a);
+      const numB = extractNumber(b);
+      if (typeof numA === "number" && typeof numB === "number") {
+        return numA - numB;
+      }
+      if (typeof numA === "number" && typeof numB === "string") {
+        return -1;
+      }
+      if (typeof numA === "string" && typeof numB === "number") {
+        return 1;
+      }
+      return a.localeCompare(b);
+    },
+
+    getSeasonIcon(seasonName) {
+      if (seasonName.includes("第") && seasonName.includes("季")) {
+        return "bi-collection text-primary";
+      }
+      return "bi-folder text-info";
+    },
     async loadChangeRecords() {
       this.recordsLoading = true;
 
       try {
-        if (this.selectedShow) {
+        if (this.selectedShow.show_name) {
           // 加载特定节目的记录
-          await this.loadShowRecords(this.selectedShow);
+          await this.loadShowRecords();
         } else {
           // 加载节目列表
           const data = await this.auth_fetch("/api/change-records");
           this.showsChangeList = data.shows || [];
+          this.showsChangeList.forEach((show) => {
+            if (show.types) {
+              show.types = show.types.sort((a, b) => {
+                const indexA = this.typeOrder.indexOf(a);
+                const indexB = this.typeOrder.indexOf(b);
+                return indexA - indexB;
+              });
+            }
+          });
         }
       } catch (error) {
         if (error.status === 401) {
@@ -334,17 +584,23 @@ new Vue({
         this.recordsLoading = false;
       }
     },
-    async selectShow(showName) {
-      this.selectedShow = showName;
-      await this.loadShowRecords(showName);
+
+    async selectShow(mediaType, showName) {
+      this.selectedShow = {
+        media_type: mediaType,
+        show_name: showName,
+      };
+      await this.loadShowRecords();
     },
-    async loadShowRecords(showName) {
+    async loadShowRecords() {
       this.recordsLoading = true;
 
       try {
-        const data = await this.auth_fetch(
-          `/api/change-records/${encodeURIComponent(showName)}`
-        );
+        const data = await this.auth_fetch("/api/change-records/show", {
+          method: "POST",
+          body: JSON.stringify(this.selectedShow),
+        });
+
         this.selectedShowRecords = data.records || [];
       } catch (error) {
         this.showModalComponent(
@@ -359,14 +615,30 @@ new Vue({
       }
     },
 
+    setTypeFilter(type) {
+      this.selectedTypeFilter = type;
+    },
     // 返回节目列表
     goBackToShows() {
-      this.selectedShow = null;
+      this.selectedShow = {
+        media_type: null,
+        show_name: null,
+      };
       this.selectedShowRecords = [];
+      this.selectedTypeFilter = "all";
+      this.groupBy = "type";
       this.loadChangeRecords();
     },
-
-    // 获取类型标签
+    getTypeIcon(type) {
+      const iconMap = {
+        rename: "bi-file-earmark-text text-primary",
+        subtitle_rename: "bi-card-text text-info",
+        audio_rename: "bi-volume-up text-success",
+        picture_rename: "bi-image text-warning",
+        nfo_delete: "bi-trash text-danger",
+      };
+      return iconMap[type] || "bi-file-earmark";
+    },
     getTypeLabel(type) {
       const typeMap = {
         rename: "文件重命名",
@@ -390,7 +662,6 @@ new Vue({
         minute: "2-digit",
       });
     },
-    // 加载日志文件列表
     async loadLogFiles() {
       this.logsLoading = true;
 
@@ -503,12 +774,7 @@ new Vue({
           this.loadSystemStatus();
           // 自动关闭
           this.closeSubPathModal();
-          this.showModalComponent(
-            "success",
-            "扫描成功",
-            "指定路径的扫描操作已完成。",
-            "bi-check-circle"
-          );
+          this.showSuccess("指定路径的扫描操作已完成。", "扫描成功");
         } else {
           this.showModalComponent(
             "error",
@@ -565,12 +831,7 @@ new Vue({
           this.loadChangeRecords();
           this.loadSystemStatus();
           this.closeSubPathRollbackModal();
-          this.showModalComponent(
-            "success",
-            "回滚成功",
-            "指定路径的回滚操作已完成。",
-            "bi-check-circle"
-          );
+          this.showSuccess("指定路径的回滚操作已完成。", "回滚成功");
         } else {
           this.showModalComponent(
             "error",
@@ -963,15 +1224,8 @@ new Vue({
           body: JSON.stringify(this.regexPatterns),
         });
         if (result.success) {
-          // 保存成功，关闭弹窗
           this.closeRegexModal();
-          // 可选：显示成功提示
-          this.showModalComponent(
-            "success",
-            "保存成功",
-            "正则配置已成功保存。",
-            "bi-check-circle"
-          );
+          this.showSuccess("正则配置已保存", "保存成功");
         } else {
           this.regexError = "保存失败: " + result.message;
         }
@@ -1034,6 +1288,46 @@ new Vue({
         this.confirmCallback();
       }
       this.closeModal();
+    },
+    copyText(text) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard
+          .writeText(text)
+          .then(() => {
+            this.showSuccess("路径已复制到剪贴板", "复制成功");
+          })
+          .catch((err) => {
+            console.error("Clipboard API 复制失败:", err);
+            this.showError("复制失败，请重试", "操作失败");
+            // 尝试 fallback
+            this.fallbackCopyText(text);
+          });
+      } else {
+        console.warn("Clipboard API 不可用，使用 fallback");
+        this.fallbackCopyText(text);
+      }
+    },
+
+    fallbackCopyText(text) {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "absolute";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        const successful = document.execCommand("copy");
+        if (successful) {
+          this.showSuccess("路径已复制到剪贴板", "复制成功");
+        } else {
+          this.showError("复制失败，请手动选择文本", "操作失败");
+        }
+      } catch (err) {
+        console.error("Fallback 复制异常:", err);
+        this.showError("复制失败，请手动复制", "操作失败");
+      }
+      document.body.removeChild(textarea);
     },
   },
 });

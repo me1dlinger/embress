@@ -379,7 +379,7 @@ class EmbressRenamer:
 
     def _sync_orphan_subtitles(self, season_dir: Path) -> List[Dict]:
         try:
-            records = config_db.get_season_change_records(str(season_dir))
+            records = config_db.get_season_change_records(str(season_dir.absolute()))
         except Exception as e:
             self.logger.warning("从数据库获取变更记录失败: %s", e)
             return []
@@ -457,7 +457,7 @@ class EmbressRenamer:
             c["path"] = str(
                 (season_dir / c.get("new", c.get("original", ""))).absolute()
             )
-            c["season_dir"] = str(season_dir)
+            c["season_dir"] = str(season_dir.absolute())
             try:
                 relative_path = season_dir.relative_to(self.media_path)
                 parts = relative_path.parts
@@ -485,7 +485,7 @@ class EmbressRenamer:
     def _season_processed_set(self, season_dir: Path) -> Set[Tuple[str, str]]:
         """从数据库获取已处理的文件集合"""
         try:
-            records = config_db.get_season_change_records(str(season_dir))
+            records = config_db.get_season_change_records(str(season_dir.absolute()))
             processed: Set[Tuple[str, str]] = set()
 
             for record in records:
@@ -560,7 +560,9 @@ class EmbressRenamer:
             code = 200
             return {"result": result, "code": code}
         try:
-            original_records = config_db.get_season_change_records(str(season_dir))
+            original_records = config_db.get_season_change_records(
+                str(season_dir.absolute())
+            )
         except Exception as e:
             self.logger.error(f"Failed to retrieve change records: {e}")
             result = {"records": [], "total": 0, "error": str(e)}
@@ -683,7 +685,7 @@ class EmbressRenamer:
                 config_db.add_change_records(nfo_delete_records)
             except Exception as e:
                 self.logger.error(f"Failed to save and delete records to database: {e}")
-            self._write_all_change_records(season_dir)
+            self._write_all_change_records(season_dir.absolute())
         except Exception as exc:
             self.logger.exception("Failed to update the rename_record.json")
         if rollback_results:
@@ -812,6 +814,7 @@ class EmbressRenamer:
             self.logger.info(f"Processing base directory: {root_path}")
             for show_dir, season_dir in self._iter_season_dirs(root_path):
                 media_type = self._extract_media_type(season_dir)
+                print(media_type)
                 p_list, t_inc, r_inc, s_inc, a_inc, p_inc, n_inc = (
                     self._scan_single_season(
                         season_dir=season_dir,
@@ -844,7 +847,7 @@ class EmbressRenamer:
             except Exception as e:
                 self.logger.error("批量保存变更记录失败: %s", e)
             for season_dir in self._seasons_to_update:
-                self._write_all_change_records(season_dir)
+                self._write_all_change_records(season_dir.absolute())
             self._pending_change_records = []
             self._seasons_to_update = set()
         return {

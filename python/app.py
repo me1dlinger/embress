@@ -267,10 +267,25 @@ def get_change_records():
         return jsonify({"shows": [], "total": 0, "error": str(e)}), 500
 
 
-@app.route("/api/change-records/<show_name>")
-def get_change_records_by_show(show_name):
+@app.route("/api/change-records/show", methods=["POST"])
+def get_change_records_by_show():
+    data = request.get_json(silent=True) or {}
+    media_type = data.get("media_type")
+    show_name = data.get("show_name")
+    if not media_type or not show_name:
+        return jsonify({"success": False, "message": "缺少参数"}), 400
     try:
-        records = config_db.get_change_records_by_show_name(show_name, limit=100)
+        records = config_db.get_change_records_by_show(media_type, show_name, limit=200)
+        media_root_path = Path(MEDIA_PATH).resolve()
+        for record in records:
+            try:
+                absolute_path = Path(record["path"]).resolve()
+                record["relative_path"] = str(
+                    absolute_path.relative_to(media_root_path)
+                )
+            except ValueError:
+                media_str = str(media_root_path)
+                record["relative_path"] = record["path"].replace(media_str + os.sep, "")
         return jsonify({"records": records, "total": len(records)})
     except Exception as e:
         app.logger.error(f"Failed to get change records for show {show_name}: {e}")
@@ -382,7 +397,7 @@ def init_change_record():
                                     rec["show_name"] = show_dir.name
                                     rec["season_name"] = season_dir.name
                                     rec["media_type"] = media_type_dir.name
-                                    rec["season_dir"] = str(season_dir)
+                                    rec["season_dir"] = str(season_dir.absolute())
                             all_records.extend(season_records)
                             app.logger.info(
                                 f"Read {len(season_records)} records from  {record_file}"

@@ -250,7 +250,10 @@
                             </div>
                             <div class="d-flex align-items-center mb-2">
                               <strong class="me-2">重命名:</strong>
-                              <span>[[ lastScanResult.renamed ]] 个视频 | [[ lastScanResult.renamed_subtitle ]] 个字幕 | [[ lastScanResult.renamed_audio ]] 个音频 | [[ lastScanResult.renamed_picture ]] 张图片</span>
+                              <span>[[ lastScanResult.renamed?lastScanResult.renamed:0 ]] 个视频 | [[
+                                lastScanResult.renamed_subtitle?lastScanResult.renamed_subtitle:0 ]] 个字幕 | [[
+                                lastScanResult.renamed_audio?lastScanResult.renamed_audio:0 ]] 个音频 | [[
+                                lastScanResult.renamed_picture?lastScanResult.renamed_picture:0 ]] 张图片</span>
                               <span v-if="lastScanResult.unrenamed_count > 0" class="ms-3">
                                 <span class="badge bg-warning text-dark me-2">
                                   <i class="bi bi-exclamation-triangle me-1"></i>
@@ -337,8 +340,10 @@
                                 </p>
                                 <div class="d-flex align-items-center mb-2">
                                   <strong class="me-2">重命名:</strong>
-                                  <span>[[ record.renamed ]] 个视频 | [[ record.renamed_subtitle
-                                    ]] 个字幕 | [[ record.renamed_audio ]] 个音频 | [[ record.renamed_picture ]] 张图片</span>
+                                  <span>[[ record.renamed?record.renamed:0 ]] 个视频 | [[
+                                    record.renamed_subtitle?record.renamed_subtitle:0
+                                    ]] 个字幕 | [[ record.renamed_audio?record.renamed_audio:0 ]] 个音频 | [[
+                                    record.renamed_picture?record.renamed_picture:0 ]] 张图片</span>
                                   <span v-if="record.unrenamed_count > 0" class="ms-3">
                                     <span class="badge bg-warning text-dark me-2">
                                       <i class="bi bi-exclamation-triangle me-1"></i>
@@ -376,11 +381,13 @@
                     <div class="card-header d-flex justify-content-between align-items-center">
                       <div class="d-flex align-items-center">
                         <i class="bi bi-list-ul me-2"></i>
-                        <span v-if="selectedShow">[[selectedShow]] - 变更记录</span>
+                        <span v-if="selectedShow.media_type">[[ selectedShow.media_type ]]/[[ selectedShow.show_name ]]
+                          - 变更记录</span>
                         <span v-else>节目变更记录</span>
                       </div>
                       <div class="d-flex gap-2">
-                        <button v-if="selectedShow" class="btn btn-sm btn-outline-secondary" @click="goBackToShows">
+                        <button v-if="selectedShow.media_type" class="btn btn-sm btn-outline-secondary"
+                          @click="goBackToShows">
                           <i class="bi bi-arrow-left me-1"></i> 返回列表
                         </button>
                         <button class="btn btn-sm btn-outline-primary" @click="loadChangeRecords">
@@ -396,23 +403,23 @@
                       </div>
 
                       <!-- 节目列表视图 -->
-                      <div v-else-if="!selectedShow">
+                      <div v-else-if="!selectedShow.media_type">
                         <div v-if="showsChangeList.length === 0">
                           <p class="text-muted">暂无变更记录</p>
                         </div>
                         <div v-else>
-                          <div v-for="showsChange in showsChangeList" :key="showsChange.show_name" class="show-item mb-3"
-                            @click="selectShow(showsChange.show_name)">
+                          <div v-for="show in showsChangeList" :key="show.show_name" class="show-item mb-3"
+                            @click="selectShow(show.media_type,show.show_name)">
                             <div class="d-flex justify-content-between align-items-center">
                               <div class="flex-grow-1">
-                                <h6 class="mb-1">
+                                <h6 class="mb-1 d-flex align-items-center copy-title">
                                   <i class="bi bi-tv me-2"></i>
-                                  [[ showsChange.show_name ]]
+                                  [[ show.media_type ]]/[[ show.show_name ]]
                                 </h6>
                                 <div class="d-flex align-items-center gap-3">
-                                  <span class="badge bg-primary">[[showsChange.record_count ]] 条记录</span>
+                                  <span class="badge bg-primary">[[ show.record_count ]] 条记录</span>
                                   <div class="type-badges">
-                                    <span v-for="type in showsChange.types" :key="type" class="badge bg-secondary me-1">
+                                    <span v-for="type in show.types" :key="type" class="badge bg-secondary me-1">
                                       [[ getTypeLabel(type) ]]
                                     </span>
                                   </div>
@@ -420,8 +427,11 @@
                               </div>
                               <div class="text-end">
                                 <small class="text-muted d-block">最后更新</small>
-                                <small class="text-muted">[[ formatDate(showsChange.latest_timestamp) ]]</small>
-                                <i class="bi bi-chevron-right ms-2"></i>
+                                <small class="text-muted">[[ formatDate(show.latest_timestamp) ]]</small>
+                                <div class="mt-1">
+                                  <i class="bi bi-chevron-right"
+                                    @click="selectShow(show.media_type,show.show_name)"></i>
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -434,41 +444,188 @@
                           <p class="text-muted">该节目暂无变更记录</p>
                         </div>
                         <div v-else>
-                          <div v-for="(record, index) in selectedShowRecords" :key="index" class="record-item mb-3"
-                            :class="{ failed: record.status !== 'success' }">
-                            <div class="d-flex justify-content-between align-items-start">
-                              <div class="flex-grow-1">
-                                <h6 class="mb-1">
-                                  <span v-if="record.rollback">
-                                    <i class="bi bi-arrow-counterclockwise text-warning"></i>
-                                    [已回滚]
-                                  </span>
-                                  <i v-else class="bi"
-                                    :class="record.status === 'success' ? 'bi-check-circle text-success' : 'bi-x-circle text-danger'"></i>
-                                  [[getTypeLabel(record.type)]]
-                                </h6>
-                                <p class="mb-1">
-                                  <strong>季度:</strong> [[record.season_name]]
-                                </p>
-                                <p class="mb-1" v-if="record.type === 'nfo_delete'">
-                                  <strong>文件名:</strong>
-                                  <code>[[record.original]]</code>
-                                </p>
-                                <p class="mb-1" v-else>
-                                  <strong>原文件名:</strong>
-                                  <code>[[record.original]]</code>
-                                </p>
-                                <p class="mb-1" v-if="record.type !== 'nfo_delete'">
-                                  <strong>新文件名:</strong>
-                                  <code>[[record.new]]</code>
-                                </p>
-                                <p v-if="record.error" class="mb-1 text-danger">
-                                  <strong>错误:</strong> [[record.error]]
-                                </p>
+                          <!-- 统计信息 -->
+                          <div class="statistics-section mb-4">
+                            <h6 class="mb-3">
+                              <i class="bi bi-bar-chart me-2"></i>
+                              统计信息
+                            </h6>
+                            <div class="row g-3 justify-content-center">
+                              <div class="col-md-2" v-for="(count, type) in recordTypeStats" :key="type">
+                                <div class="stat-card text-center">
+                                  <div class="stat-icon">
+                                    <i :class="getTypeIcon(type)"></i>
+                                  </div>
+                                  <div class="stat-number">[[ count ]]</div>
+                                  <div class="stat-label">[[ getTypeLabel(type) ]]</div>
+                                </div>
                               </div>
+                            </div>
+                          </div>
+
+                          <!-- 新增：分组方式选择 -->
+                          <div class="grouping-section mb-4">
+                            <div class="d-flex align-items-center gap-3">
+                              <span class="fw-medium">分组方式：</span>
+                              <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-sm"
+                                  :class="groupBy === 'type' ? 'btn-primary' : 'btn-outline-primary'"
+                                  @click="setGroupBy('type')">
+                                  <i class="bi bi-tags me-1"></i>
+                                  按类型分组
+                                </button>
+                                <button type="button" class="btn btn-sm"
+                                  :class="groupBy === 'season' ? 'btn-primary' : 'btn-outline-primary'"
+                                  @click="setGroupBy('season')">
+                                  <i class="bi bi-collection me-1"></i>
+                                  按季度分组
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+
+                          <!-- 修改：筛选控制 - 根据分组方式显示不同的筛选选项 -->
+                          <div class="filter-section mb-4">
+                            <div class="d-flex align-items-center gap-3">
+                              <span class="fw-medium">筛选[[groupBy === 'type' ? '类型' : '季度']]: </span>
+                              <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-sm"
+                                  :class="selectedTypeFilter === 'all' ? 'btn-primary' : 'btn-outline-primary'"
+                                  @click="setTypeFilter('all')">
+                                  全部 ([[ selectedShowRecords.length ]])
+                                </button>
+                                <template v-if="groupBy === 'type'">
+                                  <button type="button" v-for="(count, type) in recordTypeStats" :key="type"
+                                    class="btn btn-sm"
+                                    :class="selectedTypeFilter === type ? 'btn-primary' : 'btn-outline-primary'"
+                                    @click="setTypeFilter(type)">
+                                    [[ getTypeLabel(type) ]] ([[ count ]])
+                                  </button>
+                                </template>
+                                <template v-else>
+                                  <button type="button" v-for="(count, season) in seasonStats" :key="season"
+                                    class="btn btn-sm"
+                                    :class="selectedTypeFilter === season ? 'btn-primary' : 'btn-outline-primary'"
+                                    @click="setTypeFilter(season)">
+                                    [[ season ]] ([[ count ]])
+                                  </button>
+                                </template>
+                              </div>
+                            </div>
+                            <div class="mt-2">
                               <small class="text-muted">
-                                [[ formatDate(record.timestamp) ]]
+                                显示 [[ filteredRecords.length ]] 条记录
+                                <span v-if="selectedTypeFilter !== 'all'">
+                                  - [[ groupBy === 'type' ? getTypeLabel(selectedTypeFilter) : selectedTypeFilter ]]
+                                </span>
                               </small>
+                            </div>
+                          </div>
+
+                          <!-- 修改：按分组方式展示记录 -->
+                          <div v-if="selectedTypeFilter === 'all'">
+                            <div v-for="(records, groupKey) in groupedRecords" :key="groupKey" class="type-group mb-4">
+                              <div class="type-group-header">
+                                <h6 class="mb-0">
+                                  <i :class="groupBy === 'type' ? getTypeIcon(groupKey) : getSeasonIcon(groupKey)"
+                                    class="me-2"></i>
+                                  [[ groupBy === 'type' ? getTypeLabel(groupKey) : groupKey ]]
+                                  <span class="badge bg-light text-dark ms-2">[[ records.length ]]</span>
+                                </h6>
+                              </div>
+                              <div class="type-group-content">
+                                <div v-for="(record, index) in records" :key="index" class="record-item mb-3"
+                                  :class="{ failed: record.status !== 'success' }">
+                                  <div class="d-flex justify-content-between align-items-start">
+                                    <div class="flex-grow-1">
+                                      <h6 class="mb-1">
+                                        <span v-if="record.rollback">
+                                          <i class="bi bi-arrow-counterclockwise text-warning"></i>
+                                          [已回滚]
+                                        </span>
+                                        <i v-else class="bi"
+                                          :class="record.status === 'success' ? 'bi-check-circle text-success' : 'bi-x-circle text-danger'"></i>
+                                        <span v-if="groupBy === 'season'">[[ getTypeLabel(record.type) ]] - </span>
+                                        <!-- <span v-else>[[ record.show_name ]] - </span> -->
+                                        [[ record.season_name ]]
+                                      </h6>
+                                      <div class="file-info">
+                                        <div v-if="record.type === 'nfo_delete'" class="mb-1">
+                                          <strong>删除文件:</strong>
+                                          <code class="filename">[[ record.original ]]</code>
+                                        </div>
+                                        <div v-else>
+                                          <div class="mb-1">
+                                            <strong>原文件:</strong>
+                                            <code class="filename">[[ record.original ]]</code>
+                                          </div>
+                                          <div class="mb-1">
+                                            <strong>新文件:</strong>
+                                            <code class="filename">[[ record.new ]]</code>
+                                          </div>
+                                          <div class="mb-1">
+                                            <strong>路径:</strong>
+                                            <code class="filename" @click.stop="copyText(record.relative_path)"
+                                              :title="'点击复制路径:'+record.relative_path">[[ record.relative_path ]]</code>
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <p v-if="record.error" class="mb-1 text-danger">
+                                        <strong>错误:</strong> [[ record.error ]]
+                                      </p>
+                                    </div>
+                                    <div class="text-end">
+                                      <small class="text-muted">
+                                        [[ formatDate(record.timestamp) ]]
+                                      </small>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <!-- 筛选后的记录展示保持不变 -->
+                          <div v-else>
+                            <div v-for="(record, index) in filteredRecords" :key="index" class="record-item mb-3"
+                              :class="{ failed: record.status !== 'success' }">
+                              <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                  <h6 class="mb-1">
+                                    <span v-if="record.rollback">
+                                      <i class="bi bi-arrow-counterclockwise text-warning"></i>
+                                      [已回滚]
+                                    </span>
+                                    <i v-else class="bi"
+                                      :class="record.status === 'success' ? 'bi-check-circle text-success' : 'bi-x-circle text-danger'"></i>
+                                    [[ record.season_name ]]
+                                  </h6>
+                                  <div class="file-info">
+                                    <div v-if="record.type === 'nfo_delete'" class="mb-1">
+                                      <strong>删除文件:</strong>
+                                      <code class="filename">[[ record.original ]]</code>
+                                    </div>
+                                    <div v-else>
+                                      <div class="mb-1">
+                                        <strong>原文件:</strong>
+                                        <code class="filename">[[ record.original ]]</code>
+                                      </div>
+                                      <div class="mb-1">
+                                        <strong>新文件:</strong>
+                                        <code class="filename">[[ record.new ]]</code>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <p v-if="record.error" class="mb-1 text-danger">
+                                    <strong>错误:</strong> [[ record.error ]]
+                                  </p>
+                                </div>
+                                <div class="text-end">
+                                  <small class="text-muted">
+                                    [[ formatDate(record.timestamp) ]]
+                                  </small>
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -556,6 +713,22 @@
           <button v-if="hasCancel" @click="closeModal" class="modal-btn modal-btn-secondary">取消</button>
           <button @click="confirmAction" class="modal-btn modal-btn-primary">确定</button>
         </div>
+      </div>
+    </div>
+    <div class="toast-container">
+      <div v-for="toast in toasts" :key="toast.id" class="toast-item"
+        :class="['toast-' + toast.type, { 'toast-show': toast.visible }]" @click="removeToast(toast.id)">
+        <div class="toast-content">
+          <i class="toast-icon bi" :class="getToastIcon(toast.type)"></i>
+          <div class="toast-text">
+            <div class="toast-title" v-if="toast.title">[[ toast.title ]]</div>
+            <div class="toast-message">[[ toast.message ]]</div>
+          </div>
+          <button class="toast-close" @click.stop="removeToast(toast.id)">
+            <i class="bi bi-x"></i>
+          </button>
+        </div>
+        <div class="toast-progress" :style="{ animationDuration: toast.duration + 'ms' }"></div>
       </div>
     </div>
     <transition name="fade">
