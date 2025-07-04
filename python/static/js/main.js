@@ -83,6 +83,8 @@ new Vue({
     confirmCallback: null,
     toasts: [],
     toastId: 0,
+
+    showFilteredOnly: false,
   },
 
   mounted() {
@@ -466,9 +468,9 @@ new Vue({
     // 加载扫描历史
     async loadHistory() {
       this.historyLoading = true;
-
+      const filterHistoryFlag = this.showFilteredOnly ? 1 : 0;
       try {
-        const data = await this.auth_fetch("/api/history");
+        const data = await this.auth_fetch("/api/history/" + filterHistoryFlag);
 
         this.history = data.history || [];
       } catch (error) {
@@ -1163,7 +1165,10 @@ new Vue({
       this.showRegexModal = false;
       this.regexError = "";
     },
-
+    async toggleFilter() {
+      this.showFilteredOnly = !this.showFilteredOnly;
+      await this.loadHistory();
+    },
     // 加载正则表达式配置
     async loadRegexPatterns() {
       this.regexLoading = true;

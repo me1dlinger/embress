@@ -112,9 +112,10 @@ def get_status():
     )
 
 
-@app.route("/api/history")
-def get_history():
-    history = config_db.get_scan_history()
+@app.route("/api/history/<filter_flag>")
+def get_history(filter_flag: str):
+    print(filter_flag)
+    history = config_db.get_scan_history(filter_flag)
     return jsonify({"history": history, "total": len(history)})
 
 

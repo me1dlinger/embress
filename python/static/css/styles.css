@@ -180,7 +180,7 @@
  }
 
  .card-header {
-   background: linear-gradient(135deg, white 0%, #f8f9fa 100%);
+   background: linear-gradient(135deg, white 0%,  100%);
    padding: 1rem 1.5rem;
    font-weight: 700;
    font-size: 1.1rem;
@@ -522,13 +522,6 @@
  .type-group-content .record-item:hover {
    transform: none;
    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
- }
-
- /* 历史记录卡片 */
- .history-card {
-   border-radius: 10px;
-   margin-bottom: 1rem;
-   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.04);
  }
 
  .success-border {
@@ -1460,3 +1453,56 @@
      max-width: none;
    }
  }
+ /* 统计框样式 */
+.stat-box {
+  text-align: center;
+  padding: 8px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #e9ecef;
+}
+
+.stat-number {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #495057;
+}
+
+.stat-label {
+  font-size: 0.9rem;
+  color: #6c757d;
+  margin-top: 2px;
+}
+
+.rename-stats {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e9ecef;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  font-size: 0.9rem;
+  padding: 4px 0;
+}
+
+.stat-item i {
+  font-size: 0.9rem;
+}
+.card-header .badge {
+  font-size: 0.7rem;
+  padding: 0.25rem 0.5rem;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .d-flex.gap-2 {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .btn-sm {
+    font-size: 0.875rem;
+  }
+}

@@ -322,11 +322,24 @@ class ConfigDB:
             conn.rollback()
             raise sqlite3.OperationalError(f"添加扫描历史失败: {e}")
 
-    def get_scan_history(self):
+    def get_scan_history(self, filter_flag: str):
+        print("filter_flag =", filter_flag, type(filter_flag), repr(filter_flag))
         conn, cursor = self._get_connection()
-        cursor.execute(
-            "SELECT data FROM scan_history ORDER BY timestamp DESC LIMIT 50;"
-        )
+        if filter_flag == "1":
+            print("筛选")
+            cursor.execute(
+                "SELECT data FROM scan_history "
+                "WHERE deleted_nfo > 0 "
+                "OR renamed > 0 "
+                "OR renamed_subtitle > 0 "
+                "OR renamed_audio > 0 "
+                "OR renamed_picture > 0 "
+                "ORDER BY timestamp DESC LIMIT 50;"
+            )
+        else:
+            cursor.execute(
+                "SELECT data FROM scan_history ORDER BY timestamp DESC LIMIT 50;"
+            )
         history = []
         for (row,) in cursor.fetchall():
             try:

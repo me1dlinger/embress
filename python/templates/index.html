@@ -291,9 +291,16 @@
                         <i class="bi bi-clock-history me-2"></i>
                         <span>扫描历史</span>
                       </div>
-                      <button class="btn btn-sm btn-outline-primary" @click="loadHistory">
-                        <i class="bi bi-arrow-clockwise me-1"></i> 刷新
-                      </button>
+                      <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-outline-secondary" :class="{ active: showFilteredOnly }"
+                          @click="toggleFilter">
+                          <i class="bi bi-funnel me-1"></i>
+                          [[showFilteredOnly ? '显示全部' : '仅显示有效操作']]
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary" @click="loadHistory">
+                          <i class="bi bi-arrow-clockwise me-1"></i> 刷新
+                        </button>
+                      </div>
                     </div>
                     <div class="card-body">
                       <div v-if="historyLoading" class="d-flex justify-content-center py-5">
@@ -301,14 +308,21 @@
                           <span class="visually-hidden">加载中...</span>
                         </div>
                       </div>
-                      <div v-else-if="history.length === 0">
+                      <div v-else-if="history.length == 0 && !showFilteredOnly">
                         <p class="text-muted">暂无扫描历史</p>
+                      </div>
+                      <div v-else-if="history.length == 0 && showFilteredOnly">
+                        <div class="text-center py-5">
+                          <i class="bi bi-search text-muted" style="font-size: 3rem;"></i>
+                          <p class="text-muted mt-2">暂无有效操作记录</p>
+                          <p class="text-muted small">尝试切换到显示全部记录</p>
+                        </div>
                       </div>
                       <div v-else class="row">
                         <div v-for="(record, index) in history" :key="index" class="col-md-6 mb-3">
-                          <div class="card" :class="record.status === 'error' ? 'border-danger' : 'border-success'">
-                            <div class="card-header"
-                              :class="record.status === 'error' ? 'bg-danger text-black' : 'bg-success text-black'">
+                          <div class="card" :class="record.status === 'error' ? 'border-danger' : ''">
+                            <div class="card-header d-flex justify-content-between align-items-center"
+                              :class="record.status === 'error' ? 'bg-danger text-white' : 'text-black'">
                               <h6 v-if="record.scan_type=='rollback'" class="card-title mb-0">
                                 <i class="bi"
                                   :class="record.status === 'error' ? 'bi-x-circle' : 'bi-check-circle'"></i>
@@ -321,46 +335,84 @@
                               </h6>
                             </div>
                             <div class="card-body">
-                              <p>
-                                <strong>时间:</strong> [[
-                                formatDate(record.timestamp) ]]
-                              </p>
+                              <div class="row">
+                                <div class="col-12 mb-2">
+                                  <small class="text-muted">
+                                    <i class="bi bi-calendar me-1"></i>
+                                    [[ formatDate(record.timestamp) ]]
+                                  </small>
+                                </div>
+                              </div>
                               <div v-if="record.status !== 'error'">
-                                <p>
-                                  <strong>目录:</strong> [[ record.target
-                                  ]]
-                                </p>
-                                <p>
-                                  <strong>处理:</strong> [[ record.processed
-                                  ]] 个文件
-                                </p>
-                                <p>
-                                  <strong>删除:</strong> [[ record.deleted_nfo?record.deleted_nfo:0
-                                  ]] 个nfo文件
-                                </p>
-                                <div class="d-flex align-items-center mb-2">
-                                  <strong class="me-2">重命名:</strong>
-                                  <span>[[ record.renamed?record.renamed:0 ]] 个视频 | [[
-                                    record.renamed_subtitle?record.renamed_subtitle:0
-                                    ]] 个字幕 | [[ record.renamed_audio?record.renamed_audio:0 ]] 个音频 | [[
-                                    record.renamed_picture?record.renamed_picture:0 ]] 张图片</span>
-                                  <span v-if="record.unrenamed_count > 0" class="ms-3">
-                                    <span class="badge bg-warning text-dark me-2">
+                                <div class="row mb-2">
+                                  <div class="col-12">
+                                    <small class="text-muted">目录:</small>
+                                    <div class="text-break">[[ record.target ]]</div>
+                                  </div>
+                                </div>
+
+                                <div class="row g-2 mb-2">
+                                  <div class="col-6">
+                                    <div class="stat-box">
+                                      <div class="stat-number">[[ record.processed ]]</div>
+                                      <div class="stat-label">处理文件</div>
+                                    </div>
+                                  </div>
+                                  <div class="col-6">
+                                    <div class="stat-box">
+                                      <div class="stat-number">[[ record.renamed || 0 ]]</div>
+                                      <div class="stat-label">重命名视频</div>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div class="rename-stats">
+                                  <div class="row g-2">
+                                    <div class="col-6">
+                                      <div class="stat-item">
+                                        <i class="bi bi-badge-cc text-info me-1"></i>
+                                        <span>[[ record.renamed_subtitle || 0 ]] 字幕</span>
+                                      </div>
+                                    </div>
+                                    <div class="col-6">
+                                      <div class="stat-item">
+                                        <i class="bi bi-music-note text-success me-1"></i>
+                                        <span>[[ record.renamed_audio || 0 ]] 音频</span>
+                                      </div>
+                                    </div>
+                                    <div class="col-6">
+                                      <div class="stat-item">
+                                        <i class="bi bi-image text-warning me-1"></i>
+                                        <span>[[ record.renamed_picture || 0 ]] 图片</span>
+                                      </div>
+                                    </div>
+                                    <div class="col-6">
+                                      <div class="stat-item">
+                                        <i class="bi bi-trash text-danger me-1"></i>
+                                        <span>[[ record.deleted_nfo || 0 ]] NFO</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div v-if="record.unrenamed_count > 0" class="mt-3 pt-2 border-top">
+                                  <div class="d-flex justify-content-between align-items-center">
+                                    <span class="badge bg-warning text-dark">
                                       <i class="bi bi-exclamation-triangle me-1"></i>
                                       [[ record.unrenamed_count ]] 个未重命名
                                     </span>
                                     <button class="btn btn-sm btn-outline-warning"
                                       @click="showUnrenamedFiles(record.unrenamed_files)">
-                                      <i class="bi bi-eye me-1"></i>查看
+                                      <i class="bi bi-eye me-1"></i>查看详情
                                     </button>
-                                  </span>
+                                  </div>
                                 </div>
-
                               </div>
                               <div v-else>
-                                <p>
+                                <div class="alert alert-danger mb-0">
+                                  <i class="bi bi-exclamation-triangle me-2"></i>
                                   <strong>错误:</strong> [[ record.message ]]
-                                </p>
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -371,6 +423,7 @@
                 </div>
               </div>
             </div>
+
 
             <!-- 变更记录 -->
             <div :class="['tab-pane', 'fade', { show: activeTab==='records', active: activeTab==='records' }]"

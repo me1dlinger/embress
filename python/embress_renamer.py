@@ -32,6 +32,12 @@ STATUS_UNPROCESSED = "unprocessed"
 SUBTITLE_EXTS: Set[str] = {".ass", ".srt", ".vtt", ".sub"}
 AUDIO_EXTS: Set[str] = {".mka", ".flac"}
 PICTURE_EXTS: Set[str] = {".jpg", ".png", ".jpeg"}
+ADDITION_CHANGE: Set[str] = {
+    "subtitle_rename",
+    "audio_rename",
+    "picture_rename",
+    "nfo_delete",
+}
 
 SEASON_PATTERNS = [
     re.compile(r"season[ _\-]?(\d{1,2})", re.I),
@@ -972,8 +978,16 @@ class EmbressRenamer:
             )
             if orphan_changes:
                 season_changes.extend(orphan_changes)
+        print(total)
         if season_changes:
             self._queue_change_records(season_dir, media_type_name, season_changes)
+            for change in season_changes:
+                if (
+                    change.get("type") in ADDITION_CHANGE
+                    and change.get("status") == "success"
+                ):
+                    total += 1
+                    print(total)
             counts = self._count_success_by_type(season_changes)
             renamed = counts.get("rename", 0)
             renamed_sub = counts.get("subtitle_rename", 0)
