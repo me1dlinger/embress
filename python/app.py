@@ -68,7 +68,7 @@ def scheduled_scan() -> None:
     try:
         app.logger.info("Start scheduled scanning … …")
         result = renamer.scan_and_rename()
-        config_db.add_scan_history_(result)
+        config_db.add_scan_history(result)
         app.logger.info(f"Scheduled scanning completed: {result}")
     except Exception as exc:
         app.logger.exception("Scheduled scanning failed")
@@ -448,5 +448,5 @@ if __name__ == "__main__":
         app.logger.info(
             f"The scheduled task has been initiated, scan interval: {SCAN_INTERVAL}, first execution time: {get_aligned_start(SCAN_INTERVAL)}"
         )
-    port = int(os.getenv("FLASK_PORT", 15000))
+    port = int(os.getenv("FLASK_PORT", 15001))
     app.run(host="0.0.0.0", port=port, debug=False)

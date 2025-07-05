@@ -320,96 +320,78 @@
                       </div>
                       <div v-else class="row">
                         <div v-for="(record, index) in history" :key="index" class="col-md-6 mb-3">
-                          <div class="card" :class="record.status === 'error' ? 'border-danger' : ''">
-                            <div class="card-header d-flex justify-content-between align-items-center"
-                              :class="record.status === 'error' ? 'bg-danger text-white' : 'text-black'">
+                          <div class="history-card" :class="record.status === 'error' ? 'error-card' : 'success-card'">
+                            <div class="card-header" :class="record.status === 'error' ? 'error-header' : 'success-header'">
                               <h6 v-if="record.scan_type=='rollback'" class="card-title mb-0">
-                                <i class="bi"
+                                <i class="status-icon bi"
                                   :class="record.status === 'error' ? 'bi-x-circle' : 'bi-check-circle'"></i>
                                 回滚 # [[ history.length - index ]]
                               </h6>
                               <h6 v-else class="card-title mb-0">
-                                <i class="bi"
+                                <i class="status-icon bi"
                                   :class="record.status === 'error' ? 'bi-x-circle' : 'bi-check-circle'"></i>
                                 扫描 # [[ history.length - index ]]
                               </h6>
                             </div>
                             <div class="card-body">
-                              <div class="row">
-                                <div class="col-12 mb-2">
-                                  <small class="text-muted">
-                                    <i class="bi bi-calendar me-1"></i>
-                                    [[ formatDate(record.timestamp) ]]
-                                  </small>
-                                </div>
+                              <div class="timestamp-section">
+                                <small class="timestamp">
+                                  <i class="bi bi-calendar me-1"></i>
+                                  [[ formatDate(record.timestamp) ]]
+                                </small>
                               </div>
+                              
                               <div v-if="record.status !== 'error'">
-                                <div class="row mb-2">
-                                  <div class="col-12">
-                                    <small class="text-muted">目录:</small>
-                                    <div class="text-break">[[ record.target ]]</div>
+                                <div class="target-section">
+                                  <small class="section-label">目录:</small>
+                                  <div class="target-path">[[ record.target ]]</div>
+                                </div>
+
+                                <div class="stats-grid">
+                                  <div class="stat-box main-stat">
+                                    <div class="stat-number">[[ record.processed ]]</div>
+                                    <div class="stat-label">处理文件</div>
+                                  </div>
+                                  <div class="stat-box main-stat">
+                                    <div class="stat-number">[[ record.renamed || 0 ]]</div>
+                                    <div class="stat-label">重命名视频</div>
                                   </div>
                                 </div>
 
-                                <div class="row g-2 mb-2">
-                                  <div class="col-6">
-                                    <div class="stat-box">
-                                      <div class="stat-number">[[ record.processed ]]</div>
-                                      <div class="stat-label">处理文件</div>
-                                    </div>
+                                <div class="detail-stats">
+                                  <div class="detail-stat">
+                                    <i class="bi history-stat-icon" :class="getTypeIcon('subtitle_rename')"></i>
+                                    <span>[[ record.renamed_subtitle || 0 ]] 字幕</span>
                                   </div>
-                                  <div class="col-6">
-                                    <div class="stat-box">
-                                      <div class="stat-number">[[ record.renamed || 0 ]]</div>
-                                      <div class="stat-label">重命名视频</div>
-                                    </div>
+                                  <div class="detail-stat">
+                                    <i class="bi history-stat-icon" :class="getTypeIcon('audio_rename')"></i>
+                                    <span>[[ record.renamed_audio || 0 ]] 音频</span>
                                   </div>
-                                </div>
-
-                                <div class="rename-stats">
-                                  <div class="row g-2">
-                                    <div class="col-6">
-                                      <div class="stat-item">
-                                        <i class="bi bi-badge-cc text-info me-1"></i>
-                                        <span>[[ record.renamed_subtitle || 0 ]] 字幕</span>
-                                      </div>
-                                    </div>
-                                    <div class="col-6">
-                                      <div class="stat-item">
-                                        <i class="bi bi-music-note text-success me-1"></i>
-                                        <span>[[ record.renamed_audio || 0 ]] 音频</span>
-                                      </div>
-                                    </div>
-                                    <div class="col-6">
-                                      <div class="stat-item">
-                                        <i class="bi bi-image text-warning me-1"></i>
-                                        <span>[[ record.renamed_picture || 0 ]] 图片</span>
-                                      </div>
-                                    </div>
-                                    <div class="col-6">
-                                      <div class="stat-item">
-                                        <i class="bi bi-trash text-danger me-1"></i>
-                                        <span>[[ record.deleted_nfo || 0 ]] NFO</span>
-                                      </div>
-                                    </div>
+                                  <div class="detail-stat">
+                                    <i class="bi history-stat-icon" :class="getTypeIcon('picture_rename')"></i>
+                                    <span>[[ record.renamed_picture || 0 ]] 图片</span>
+                                  </div>
+                                  <div class="detail-stat">
+                                    <i class="bi history-stat-icon" :class="getTypeIcon('nfo_delete')"></i>
+                                    <span>[[ record.deleted_nfo || 0 ]] NFO</span>
                                   </div>
                                 </div>
 
-                                <div v-if="record.unrenamed_count > 0" class="mt-3 pt-2 border-top">
-                                  <div class="d-flex justify-content-between align-items-center">
-                                    <span class="badge bg-warning text-dark">
+                                <div v-if="record.unrenamed_count > 0" class="unrenamed-section">
+                                  <div class="unrenamed-content">
+                                    <span class="unrenamed-badge">
                                       <i class="bi bi-exclamation-triangle me-1"></i>
                                       [[ record.unrenamed_count ]] 个未重命名
                                     </span>
-                                    <button class="btn btn-sm btn-outline-warning"
+                                    <button class="btn btn-sm btn-outline-warning unrenamed-btn"
                                       @click="showUnrenamedFiles(record.unrenamed_files)">
                                       <i class="bi bi-eye me-1"></i>查看详情
                                     </button>
                                   </div>
                                 </div>
                               </div>
-                              <div v-else>
-                                <div class="alert alert-danger mb-0">
+                              <div v-else class="error-content">
+                                <div class="error-message">
                                   <i class="bi bi-exclamation-triangle me-2"></i>
                                   <strong>错误:</strong> [[ record.message ]]
                                 </div>
