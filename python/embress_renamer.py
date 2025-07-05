@@ -479,7 +479,6 @@ class EmbressRenamer:
 
     def _write_all_change_records(self, season_dir):
         rename_record_path = season_dir / "rename_record.json"
-        print(rename_record_path)
         try:
             new_records = config_db.get_season_change_records(str(season_dir))
         except Exception as e:
@@ -820,7 +819,6 @@ class EmbressRenamer:
             self.logger.info(f"Processing base directory: {root_path}")
             for show_dir, season_dir in self._iter_season_dirs(root_path):
                 media_type = self._extract_media_type(season_dir)
-                print(media_type)
                 p_list, t_inc, r_inc, s_inc, a_inc, p_inc, n_inc = (
                     self._scan_single_season(
                         season_dir=season_dir,
@@ -978,7 +976,6 @@ class EmbressRenamer:
             )
             if orphan_changes:
                 season_changes.extend(orphan_changes)
-        print(total)
         if season_changes:
             self._queue_change_records(season_dir, media_type_name, season_changes)
             for change in season_changes:
@@ -987,7 +984,6 @@ class EmbressRenamer:
                     and change.get("status") == "success"
                 ):
                     total += 1
-                    print(total)
             counts = self._count_success_by_type(season_changes)
             renamed = counts.get("rename", 0)
             renamed_sub = counts.get("subtitle_rename", 0)

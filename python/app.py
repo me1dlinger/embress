@@ -68,7 +68,7 @@ def scheduled_scan() -> None:
     try:
         app.logger.info("Start scheduled scanning … …")
         result = renamer.scan_and_rename()
-        config_db.add_scan_history(result)
+        config_db.add_scan_history_(result)
         app.logger.info(f"Scheduled scanning completed: {result}")
     except Exception as exc:
         app.logger.exception("Scheduled scanning failed")
@@ -114,7 +114,6 @@ def get_status():
 
 @app.route("/api/history/<filter_flag>")
 def get_history(filter_flag: str):
-    print(filter_flag)
     history = config_db.get_scan_history(filter_flag)
     return jsonify({"history": history, "total": len(history)})
 

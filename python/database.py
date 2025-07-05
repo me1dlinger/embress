@@ -308,7 +308,7 @@ class ConfigDB:
                     result.get("scan_type", "scan"),
                     result.get("message"),
                     result.get("processed", 0),
-                    result.get("renamed_video", 0),
+                    result.get("renamed", 0),
                     result.get("renamed_subtitle", 0),
                     result.get("renamed_audio", 0),
                     result.get("renamed_picture", 0),
@@ -323,10 +323,8 @@ class ConfigDB:
             raise sqlite3.OperationalError(f"添加扫描历史失败: {e}")
 
     def get_scan_history(self, filter_flag: str):
-        print("filter_flag =", filter_flag, type(filter_flag), repr(filter_flag))
         conn, cursor = self._get_connection()
         if filter_flag == "1":
-            print("筛选")
             cursor.execute(
                 "SELECT data FROM scan_history "
                 "WHERE deleted_nfo > 0 "
