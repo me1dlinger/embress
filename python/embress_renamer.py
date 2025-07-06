@@ -123,16 +123,16 @@ class EmbressRenamer:
         # (季,集)
         for pat in p_cfg.get("season_episode", []):
             if m := re.search(pat, filename, re.I):
-                return int(m.group(1)), int(m.group(2))
+                season = int(m.group(1))
+                episode = float(m.group(2)) if "." in m.group(2) else int(m.group(2))
+                return season, episode
 
         # 仅集数
         for pat in p_cfg.get("episode_only", []):
-            if pat == r"\[(\d{1,3})\]":
-                ms = list(re.finditer(pat, filename))
-                if ms:
-                    return None, int(ms[-1].group(1))
-            elif m := re.search(pat, filename, re.I):
-                return None, int(m.group(1))
+            if m := re.search(pat, filename, re.I):
+                episode_str = m.group(1)
+                episode = float(episode_str) if "." in episode_str else int(episode_str)
+                return None, episode
         return None
 
     def _get_season_from_path(self, file_path: Path) -> Optional[int]:
@@ -142,25 +142,26 @@ class EmbressRenamer:
         return None
 
     def _generate_new_filename(
-        self, original: str, season: Optional[int], episode: int
+        self, original: str, season: Optional[int], episode: Union[int, float]
     ) -> str:
         season_fmt = season if season is not None else 1
-        new_seg = f"S{season_fmt:02d}E{episode:02d}"
+        ep_fmt = (
+            f"{episode:.1f}".rstrip("0").rstrip(".")
+            if isinstance(episode, float)
+            else f"{episode:02d}"
+        )
+        new_seg = f"S{season_fmt:02d}E{ep_fmt}"
         new = original
 
-        # 0) 已含 [SxxEyy] → 不动
-        if re.search(rf"\[{new_seg}\]", new, re.I):
+        # 已含 SxxEyy 或 SxxEyy.y → 不动
+        if re.search(rf"\[{new_seg}\]", new, re.I) or re.search(
+            rf"\bS{season_fmt:02d}E{ep_fmt}\b", new, re.I
+        ):
             return new
 
-        # 1-A) 裸露的 SxxEyy → 加方括号（末尾加空格，稍后清理）
-        full_pat = rf"S{season_fmt:02d}E{episode:02d}"
-        new2 = re.sub(full_pat, f" [{new_seg}] ", new, count=1, flags=re.I)
-        if new2 != new:
-            return self._normalize_filename(new2)
-
-        # 1-B) “- 01 …” / “- 01 (”
+        # 示例：- 6.5 → - [S01E6.5]
         new2 = re.sub(
-            r"-\s*\d{1,3}(?=\s+(?:\[|\(|[A-Za-z]))",
+            r"-\s*\d{1,3}(?:\.\d)?(?=\s+(?:\[|\(|[A-Za-z]))",
             f"- [{new_seg}] ",
             new,
             count=1,
@@ -169,9 +170,8 @@ class EmbressRenamer:
         if new2 != new:
             return self._normalize_filename(new2)
 
-        # 1-C) “ 10 (” 型
         new2 = re.sub(
-            r"\s+\d{1,3}(?=\s*\()",
+            r"\s+\d{1,3}(?:\.\d)?(?=\s*\()",
             f" [{new_seg}]",
             new,
             count=1,
@@ -179,29 +179,32 @@ class EmbressRenamer:
         if new2 != new:
             return self._normalize_filename(new2)
 
-        # 2) “ 01[” 型
-        new2 = re.sub(r"\s+\d{1,3}(?=\s*\[)", f" [{new_seg}]", new, count=1)
+        new2 = re.sub(r"\s+\d{1,3}(?:\.\d)?(?=\s*\[)", f" [{new_seg}]", new, count=1)
         if new2 != new:
             return self._normalize_filename(new2)
 
-        # 3) 最后一个 “[数字]”
-        matches = list(re.finditer(r"\[(\d{1,3})\]", new))
+        # “[数字]” → “[SxxEyy]”
+        matches = list(re.finditer(r"\[(\d{1,3}(?:\.\d)?)\]", new))
         if matches:
             s, e = matches[-1].span()
             new2 = new[:s] + f"[{new_seg}]" + new[e:]
             return self._normalize_filename(new2)
 
-        # 4) “- 01 -”
-        new2 = re.sub(r"-(\s*)\d{1,3}(\s*)-", rf"-\1[{new_seg}]\2-", new, count=1)
+        # "- 6.5 -" → "- [S01E6.5] -"
+        new2 = re.sub(
+            r"-(\s*)\d{1,3}(?:\.\d)?(\s*)-", rf"-\1[{new_seg}]\2-", new, count=1
+        )
         if new2 != new:
             return self._normalize_filename(new2)
 
-        # 5) Episode / Eyy（注意避免 SxxEyy 被命中两次）
-        new2 = re.sub(r"(?<!S\d{2})E\d{1,3}", new_seg, new, count=1, flags=re.I)
+        # Episode / Eyy，避免重复插入
+        new2 = re.sub(
+            r"(?<!S\d{2})E\d{1,3}(?:\.\d)?", new_seg, new, count=1, flags=re.I
+        )
         if new2 != new:
             return self._normalize_filename(new2)
 
-        # 6) 默认：加在扩展名前
+        # 默认添加
         p = Path(original)
         new2 = f"{p.stem} [{new_seg}]{p.suffix}"
         return self._normalize_filename(new2)
