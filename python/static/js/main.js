@@ -415,7 +415,35 @@ new Vue({
         this.statusLoading = false;
       }
     },
-
+    async toogleSchedulerState() {
+      
+      try {
+        const data = await this.auth_fetch("/api/scheduler/toggle", {
+          method: "POST",
+        });
+        this.loadSystemStatus();
+      } catch (error) {
+        if (error.status === 401) {
+          // 鉴权失败逻辑
+          this.isAuthenticated = false;
+          localStorage.removeItem("access_key");
+          this.authError = "未授权或密钥无效";
+          this.showModalComponent(
+            "error",
+            "认证失败",
+            "Access Key 无效或已过期，请重新登录。",
+            "bi-lock"
+          );
+        } else {
+          this.showModalComponent(
+            "error",
+            "请求失败",
+            "请求失败: 网络错误",
+            "bi-x-circle"
+          );
+        }
+      }
+    },
     // 手动扫描
     async performManualScan() {
       this.scanLoading = true;

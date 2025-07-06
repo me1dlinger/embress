@@ -133,9 +133,8 @@
                             <strong>调度器状态:</strong>
                           </div>
                           <div class="col-6">
-                            <span class="badge" :class="systemStatus.scheduler_running ? 'bg-success' : 'bg-danger'">
-                              [[ systemStatus.scheduler_running ? '运行中' :
-                              '已停止' ]]
+                            <span class="badge" :class="systemStatus.scheduler_running ? 'bg-success' : 'bg-danger'" @click="toogleSchedulerState">
+                              [[ systemStatus.scheduler_state_name]]
                             </span>
                           </div>
                         </div>

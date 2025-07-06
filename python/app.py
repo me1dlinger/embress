@@ -12,6 +12,7 @@ from pathlib import Path
 from logging.handlers import TimedRotatingFileHandler
 from flask import Flask, render_template, request, jsonify
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.schedulers.base import STATE_RUNNING, STATE_PAUSED
 from embress_renamer import EmbressRenamer, WhitelistLoader
 from database import config_db
 from datetime import datetime, timedelta
@@ -93,23 +94,67 @@ def authenticate():
     return jsonify({"success": False, "message": "访问密钥错误"})
 
 
+from apscheduler.schedulers.base import STATE_RUNNING, STATE_PAUSED, STATE_STOPPED
+
+
 @app.route("/api/status")
 def get_status():
-    next_run_time = "未安排"
-    job = scheduler.get_job(job_id="scan_job")  # 通过job_id获取任务
-    if job and job.next_run_time:
+    job = scheduler.get_job(job_id="scan_job")
+    scheduler_state = scheduler.state
+    next_run_time = None
+
+    if scheduler_state == STATE_RUNNING and job and job.next_run_time:
         next_run_time = job.next_run_time.astimezone().strftime("%Y-%m-%d %H:%M:%S")
+    elif scheduler_state == STATE_PAUSED:
+        next_run_time = "已暂停"
+    elif scheduler_state == STATE_STOPPED:
+        next_run_time = "未启动"
+    else:
+        next_run_time = "未知"
+
     return jsonify(
         {
             "media_path": MEDIA_PATH,
             "scan_interval": SCAN_INTERVAL,
             "last_scan": config_db.get_last_scan_result(),
-            "scheduler_running": scheduler.running,
+            "scheduler_running": scheduler_state,
             "total_scans": config_db.get_scan_history_count(),
             "total_whitelist": len(config_db.get_whitelist()),
             "next_scan_time": next_run_time,
+            "scheduler_state_name": {0: "已停止", 1: "运行中", 2: "已暂停"}.get(
+                scheduler_state, f"UNKNOWN({scheduler_state})"
+            ),
         }
     )
+
+
+@app.route("/api/scheduler/toggle", methods=["POST"])
+def toggle_scheduler():
+    try:
+        state = scheduler.state
+
+        if state == STATE_RUNNING:
+            scheduler.pause()
+            msg = "调度器已暂停"
+        elif state == STATE_PAUSED:
+            scheduler.resume()
+            msg = "调度器已恢复"
+        else:
+            scheduler.start()
+            msg = "调度器已启动"
+
+        app.logger.info(msg)
+        return jsonify(
+            {
+                "success": True,
+                "running": scheduler.running,
+                "state": scheduler.state,
+                "message": msg,
+            }
+        )
+    except Exception as exc:
+        app.logger.exception("切换调度器状态失败")
+        return jsonify({"success": False, "message": str(exc)}), 500
 
 
 @app.route("/api/history/<filter_flag>")
