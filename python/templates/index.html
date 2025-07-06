@@ -1042,8 +1042,13 @@
           <div class="modal-header">
             <h5 class="modal-title">
               <i class="bi bi-code-slash me-2"></i> 正则表达式配置
+              <button type="button" class="btn btn-sm regex-upload-btn me-2" @click="triggerImportFile">
+                <i class="bi bi-upload me-2"></i> 导入配置
+              </button>
             </h5>
-            <button type="button" class="btn-close" @click="closeRegexModal"></button>
+            <input ref="importFileInput" type="file" accept=".json" @change="handleImportFile" style="display: none">
+            <button type="button" class="btn-close btn-sm me-2 " @click="closeRegexModal"></button>
+
           </div>
 
           <div class="modal-body">

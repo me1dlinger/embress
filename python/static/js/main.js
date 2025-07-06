@@ -1372,6 +1372,122 @@ new Vue({
         this.regexSaving = false;
       }
     },
+    triggerImportFile() {
+      this.$refs.importFileInput.click();
+    },
+    triggerImportFile() {
+      this.$refs.importFileInput.click();
+    },
+
+    // 处理文件导入
+    async handleImportFile(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      // 验证文件类型
+      if (!file.name.toLowerCase().endsWith(".json")) {
+        this.regexError = "只支持 JSON 格式的配置文件";
+        return;
+      }
+
+      // 验证文件大小 (限制为 1MB)
+      if (file.size > 1024 * 1024) {
+        this.regexError = "文件大小不能超过 1MB";
+        return;
+      }
+
+      this.regexLoading = true;
+      this.regexError = "";
+
+      try {
+        // 读取文件内容
+        const fileContent = await this.readFileAsText(file);
+        let configData;
+
+        try {
+          configData = JSON.parse(fileContent);
+        } catch (parseError) {
+          this.regexError = "JSON 文件格式无效";
+          return;
+        }
+
+        // 验证配置数据结构
+        if (!this.validateConfigData(configData)) {
+          this.regexError = "配置文件格式不正确，请检查文件内容";
+          return;
+        }
+        const result = await this.auth_fetch("/api/regex-patterns", {
+          method: "POST",
+          body: JSON.stringify(configData),
+        });
+        if (result.success) {
+          // 成功后刷新数据
+          await this.loadRegexPatterns();
+          this.showSuccess("配置导入成功", "导入成功");
+        } else {
+          this.regexError = "导入失败: " + result.message;
+        }
+      } catch (error) {
+        if (error.status === 401) {
+          // 鉴权失败逻辑
+          this.isAuthenticated = false;
+          localStorage.removeItem("access_key");
+          this.authError = "未授权或密钥无效";
+          this.showModalComponent(
+            "error",
+            "认证失败",
+            "Access Key 无效或已过期，请重新登录。",
+            "bi-lock"
+          );
+        } else {
+          this.showModalComponent(
+            "error",
+            "请求失败",
+            "导入失败: 网络错误",
+            "bi-x-circle"
+          );
+        }
+        this.regexError = "导入失败: 网络错误";
+      } finally {
+        this.regexLoading = false;
+        // 清空文件输入，以便可以重复选择同一文件
+        event.target.value = "";
+      }
+    },
+
+    // 读取文件内容
+    readFileAsText(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = (e) => reject(new Error("文件读取失败"));
+        reader.readAsText(file, "UTF-8");
+      });
+    },
+
+    // 验证配置数据结构
+    validateConfigData(data) {
+      if (!data || typeof data !== "object") {
+        return false;
+      }
+
+      // 检查必要的字段
+      if (!data.episode_only || !Array.isArray(data.episode_only)) {
+        return false;
+      }
+
+      if (!data.season_episode || !Array.isArray(data.season_episode)) {
+        return false;
+      }
+
+      // 检查数组中的元素是否都是字符串
+      const isValidArray = (arr) =>
+        arr.every((item) => typeof item === "string");
+
+      return (
+        isValidArray(data.episode_only) && isValidArray(data.season_episode)
+      );
+    },
     showModalComponent(
       type,
       title,

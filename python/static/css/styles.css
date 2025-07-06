@@ -1007,6 +1007,12 @@
    margin-bottom: 0.75rem;
  }
 
+ .regex-upload-btn:hover {
+   color: #488fff;
+   transform: translateY(-1px);
+ }
+
+
  .regex-input-group .form-control {
    border-top-right-radius: 0;
    border-bottom-right-radius: 0;
