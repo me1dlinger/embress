@@ -565,4 +565,4 @@ if __name__ == "__main__":
             f"The scheduled task has been initiated, scan interval: {SCAN_INTERVAL}, first execution time: {get_aligned_start(SCAN_INTERVAL)}"
         )
     port = int(os.getenv("FLASK_PORT", 15000))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=port, debug=False)
