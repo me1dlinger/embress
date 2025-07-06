@@ -173,8 +173,11 @@ def toggle_scheduler():
 
 @app.route("/api/history/<filter_flag>")
 def get_history(filter_flag: str):
-    history = config_db.get_scan_history(filter_flag)
-    return jsonify({"history": history, "total": len(history)})
+    historys = config_db.get_scan_history(filter_flag)
+    for history in historys:
+        if "unrenamed_files" in history:
+            history["unrenamed_files"] = enrich_path_fields(history["unrenamed_files"])
+    return jsonify({"history": historys, "total": len(historys)})
 
 
 @app.route("/api/manual-scan", methods=["POST"])
@@ -561,5 +564,5 @@ if __name__ == "__main__":
         app.logger.info(
             f"The scheduled task has been initiated, scan interval: {SCAN_INTERVAL}, first execution time: {get_aligned_start(SCAN_INTERVAL)}"
         )
-    port = int(os.getenv("FLASK_PORT", 15001))
+    port = int(os.getenv("FLASK_PORT", 15000))
     app.run(host="0.0.0.0", port=port, debug=True)
