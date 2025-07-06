@@ -57,6 +57,8 @@ new Vue({
     unrenamedFiles: [],
     addToWhitelistLoading: false,
 
+    renameLoading: false,
+
     showWhitelistModal: false,
     whitelistFiles: [],
     whitelistLoading: false,
@@ -416,7 +418,6 @@ new Vue({
       }
     },
     async toogleSchedulerState() {
-      
       try {
         const data = await this.auth_fetch("/api/scheduler/toggle", {
           method: "POST",
@@ -896,13 +897,26 @@ new Vue({
     },
     showUnrenamedFiles(files) {
       this.unrenamedFiles = files || [];
+      console.log(
+        "🚀 ~ showUnrenamedFiles ~ this.unrenamedFiles:",
+        this.unrenamedFiles
+      );
+
       this.showUnrenamedModal = true;
     },
 
     // 关闭未重命名文件弹窗
     closeUnrenamedModal() {
+      const editingFile = this.unrenamedFiles.find((file) => file.isRenaming);
+      if (editingFile) {
+        // 取消所有正在编辑的项目
+        this.unrenamedFiles.forEach((file, index) => {
+          if (file.isRenaming) {
+            this.cancelRename(file, index);
+          }
+        });
+      }
       this.showUnrenamedModal = false;
-      this.unrenamedFiles = [];
     },
     // 显示白名单文件弹窗
     async showWhitelist() {
@@ -1022,6 +1036,96 @@ new Vue({
       } finally {
         this.addToWhitelistLoading = false;
       }
+    },
+    startRename(file, index) {
+      // 取消其他正在编辑的项目
+      this.unrenamedFiles.forEach((f, i) => {
+        if (f.isRenaming && i !== index) {
+          this.cancelRename(f, i);
+        }
+      });
+
+      // 开始重命名 - 使用Vue.set或者重新赋值来触发响应式更新
+      this.$set(file, "isRenaming", true);
+      this.$set(file, "originalFileName", file.file_name);
+      this.$set(file, "newFileName", file.file_name);
+      this.$set(file, "renameError", "");
+      this.$set(file, "isSubmitting", false);
+
+      // 聚焦到输入框
+      this.$nextTick(() => {
+        const input = document.getElementById("rename-input-" + index);
+        if (input) {
+          input.focus();
+          input.select();
+        }
+      });
+    },
+
+    cancelRename(file, index) {
+      this.$set(file, "isRenaming", false);
+      this.$set(file, "newFileName", "");
+      this.$set(file, "renameError", "");
+      this.$set(file, "isSubmitting", false);
+      // 恢复原文件名
+      if (file.originalFileName) {
+        this.$set(file, "file_name", file.originalFileName);
+      }
+    },
+
+    async confirmRename(file, index) {
+      if (!file.newFileName || file.newFileName.trim() === "") {
+        this.$set(file, "renameError", "文件名不能为空");
+        return;
+      }
+
+      if (file.newFileName === file.originalFileName) {
+        this.$set(file, "renameError", "新文件名与原文件名相同");
+        return;
+      }
+
+      // 简单的文件名验证
+      if (!/^[^<>:"/\\|?*]+$/.test(file.newFileName)) {
+        this.$set(file, "renameError", "文件名包含非法字符");
+        return;
+      }
+
+      this.$set(file, "renameError", "");
+      this.$set(file, "isSubmitting", true);
+      this.renameLoading = true;
+
+      try {
+        // 这里调用你的重命名API
+        const result = await this.renameFile({
+          file_path: file.file_directory,
+          file_name: file.originalFileName,
+          new_file_name: file.newFileName.trim(),
+        });
+
+        if (result.success) {
+          // 重命名成功，更新文件信息
+          this.$set(file, "file_name", file.newFileName.trim());
+          this.$set(file, "isRenaming", false);
+          this.$set(file, "newFileName", "");
+          this.$set(file, "originalFileName", "");
+          // 或者显示成功消息
+          this.showSuccess("文件重命名成功", "文件重命名");
+        } else {
+          this.$set(file, "renameError", result.message || "重命名失败");
+        }
+      } catch (error) {
+        this.$set(file, "renameError", "网络错误，请稍后重试");
+        console.error("重命名失败:", error);
+      } finally {
+        this.$set(file, "isSubmitting", false);
+        this.renameLoading = false;
+      }
+    },
+    async renameFile(data) {
+      return this.auth_fetch("/api/rename-file", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
     },
     async deleteFromWhitelist(filePath) {
       this.deleteFromWhitelistLoading = true;
@@ -1164,23 +1268,6 @@ new Vue({
       this.newWhitelistItems = [];
       this.newWhitelistPath = "";
       this.newWhitelistType = "file";
-    },
-
-    getFileName(filePath) {
-      const normalized = filePath.replace(/[\\/]+/g, "/").replace(/\/$/, "");
-      return normalized.substring(normalized.lastIndexOf("/") + 1);
-    },
-
-    getDirectoryPath(filePath) {
-      const normalized = filePath.replace(/[\\/]+/g, "/").replace(/\/$/, "");
-      const lastIndex = normalized.lastIndexOf("/");
-      if (lastIndex === -1) return "";
-      const directoryPath = normalized.substring(0, lastIndex);
-      if (/^[a-zA-Z]:$/.test(directoryPath)) {
-        return directoryPath + "/";
-      }
-
-      return directoryPath || "/";
     },
     async showRegexConfig() {
       this.showRegexModal = true;

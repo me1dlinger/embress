@@ -133,7 +133,8 @@
                             <strong>调度器状态:</strong>
                           </div>
                           <div class="col-6">
-                            <span class="badge" :class="systemStatus.scheduler_running ? 'bg-success' : 'bg-danger'" @click="toogleSchedulerState">
+                            <span class="badge" :class="systemStatus.scheduler_running ? 'bg-success' : 'bg-danger'"
+                              @click="toogleSchedulerState">
                               [[ systemStatus.scheduler_state_name]]
                             </span>
                           </div>
@@ -320,7 +321,8 @@
                       <div v-else class="row">
                         <div v-for="(record, index) in history" :key="index" class="col-md-6 mb-3">
                           <div class="history-card" :class="record.status === 'error' ? 'error-card' : 'success-card'">
-                            <div class="card-header" :class="record.status === 'error' ? 'error-header' : 'success-header'">
+                            <div class="card-header"
+                              :class="record.status === 'error' ? 'error-header' : 'success-header'">
                               <h6 v-if="record.scan_type=='rollback'" class="card-title mb-0">
                                 <i class="status-icon bi"
                                   :class="record.status === 'error' ? 'bi-x-circle' : 'bi-check-circle'"></i>
@@ -339,7 +341,7 @@
                                   [[ formatDate(record.timestamp) ]]
                                 </small>
                               </div>
-                              
+
                               <div v-if="record.status !== 'error'">
                                 <div class="target-section">
                                   <small class="section-label">目录:</small>
@@ -837,26 +839,74 @@
             <div v-else>
               <p class="text-muted mb-3">
                 <i class="bi bi-info-circle me-1"></i>
-                共 <strong>[[ unrenamedFiles.length ]]</strong> 个文件未能重命名，您可以将这些文件添加到白名单中以跳过处理。
+                共 <strong>[[ unrenamedFiles.length ]]</strong> 个文件未能重命名，您可以将这些文件添加到白名单中以跳过处理，或手动重命名。
               </p>
               <div class="unrenamed-files-list">
-                <div v-for="(file, index) in unrenamedFiles" :key="index" class="unrenamed-file-item">
-                  <div class="file-info">
-                    <div class="file-name">
-                      <i class="bi bi-file-earmark me-2"></i>
-                      <strong>[[ getFileName(file.path) ]]</strong>
+                <div v-for="(file, index) in unrenamedFiles" :key="index" class="unrenamed-file-item"
+                  :class="{ 'file-item-editing': file.isRenaming }">
+
+                  <div class="rename-container">
+                    <!-- 正常显示状态 -->
+                    <div v-if="!file.isRenaming" class="file-info">
+                      <div class="file-name">
+                        <i class="bi bi-file-earmark me-2"></i>
+                        <strong>[[ file.file_name ]]</strong>
+                      </div>
+                      <div class="file-path text-muted">
+                        <i class="bi bi-folder me-1"></i>
+                        [[ file.file_directory ]]
+                      </div>
                     </div>
-                    <div class="file-path text-muted">
-                      <i class="bi bi-folder me-1"></i>
-                      [[ getDirectoryPath(file.path) ]]
+
+                    <!-- 重命名编辑状态 -->
+                    <div v-else class="file-info">
+                      测试测试
+                      <div class="file-name">
+                        <i class="bi bi-file-earmark me-2"></i>
+                        <strong>[[ file.file_name ]]</strong>
+                        <span class="text-muted ms-2">(正在重命名)</span>
+                      </div>
+                      <div class="file-path text-muted">
+                        <i class="bi bi-folder me-1"></i>
+                        [[ file.file_directory ]]
+                      </div>
+                      <div class="rename-input-group">
+                        <input type="text" class="rename-input" :class="{ 'is-invalid': file.renameError }"
+                          v-model="file.newFileName" @keyup.enter="confirmRename(file, index)"
+                          @keyup.esc="cancelRename(file, index)" placeholder="输入新文件名" :id="'rename-input-' + index">
+                        <div class="rename-actions">
+                          <button class="rename-btn rename-btn-confirm" @click="confirmRename(file, index)"
+                            :disabled="renameLoading || !file.newFileName || file.newFileName.trim() === ''"
+                            title="确认重命名">
+                            <span v-if="renameLoading && file.isSubmitting"
+                              class="spinner-border spinner-border-sm"></span>
+                            <i v-else class="bi bi-check"></i>
+                          </button>
+                          <button class="rename-btn rename-btn-cancel" @click="cancelRename(file, index)"
+                            :disabled="renameLoading && file.isSubmitting" title="取消重命名">
+                            <i class="bi bi-x"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <div v-if="file.renameError" class="rename-error">
+                        [[ file.renameError ]]
+                      </div>
                     </div>
                   </div>
-                  <button class="btn btn-sm btn-outline-primary" @click="addToWhitelist(file.path)"
-                    :disabled="whitelistLoading">
-                    <span v-if="whitelistLoading" class="spinner-border spinner-border-sm me-1"></span>
-                    <i v-else class="bi bi-plus-circle me-1"></i>
-                    加入白名单
-                  </button>
+
+                  <div class="file-actions">
+                    <button v-if="!file.isRenaming" class="btn btn-sm btn-rename-action btn-outline me-2"
+                      @click="startRename(file, index)" :disabled="whitelistLoading || renameLoading">
+                      <i class="bi bi-pencil me-1"></i>
+                      重命名
+                    </button>
+                    <button class="btn btn-sm btn-outline-primary" @click="addToWhitelist(file.path)"
+                      :disabled="whitelistLoading || renameLoading || file.isRenaming">
+                      <span v-if="whitelistLoading" class="spinner-border spinner-border-sm me-1"></span>
+                      <i v-else class="bi bi-plus-circle me-1"></i>
+                      加入白名单
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -929,7 +979,7 @@
                   <div class="file-info">
                     <div class="file-name">
                       <i class="bi" :class="item.type === 'directory' ? 'bi-folder-fill' : 'bi-file-earmark'" me-2></i>
-                      <strong>[[ getFileName(item.path) ]]</strong>
+                      <strong>[[ item.file_name]]</strong>
                       <span class="badge bg-success ms-2">新增</span>
                       <span class="badge" :class="item.type === 'directory' ? 'bg-warning' : 'bg-info'" ms-1>
                         [[ item.type === 'directory' ? '目录' : '文件' ]]
@@ -937,7 +987,7 @@
                     </div>
                     <div class="file-path text-muted">
                       <i class="bi bi-folder me-1"></i>
-                      [[ getDirectoryPath(item.path) ]]
+                      [[ item.file_directory ]]
                     </div>
                   </div>
                   <button class="btn btn-sm btn-outline-danger" @click="removeNewWhitelistItem(index)">
@@ -950,11 +1000,11 @@
                   <div v-if="file.type=='file'" class="file-info">
                     <div class="file-name">
                       <i class="bi bi-file-earmark me-2"></i>
-                      <strong>[[ getFileName(file.path) ]]</strong>
+                      <strong>[[ file.file_name]]</strong>
                     </div>
                     <div class="file-path text-muted">
                       <i class="bi bi-folder me-1"></i>
-                      [[ getDirectoryPath(file.path) ]]
+                      [[file.file_directory ]]
                     </div>
                   </div>
                   <div v-else class="file-info">

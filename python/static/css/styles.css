@@ -687,7 +687,7 @@
  }
 
  .unrenamed-modal {
-   max-width: 800px;
+   max-width: 900px;
    max-height: 80vh;
    display: flex;
    flex-direction: column;
@@ -733,6 +733,117 @@
    margin-bottom: 0;
  }
 
+ .file-actions {
+   display: flex;
+   gap: 0.5rem;
+   flex-shrink: 0;
+ }
+
+ .rename-container {
+   flex: 1;
+   margin-right: 1rem;
+ }
+
+ .rename-input-group {
+   display: flex;
+   align-items: center;
+   gap: 0.5rem;
+   margin-top: 0.5rem;
+ }
+
+ .rename-input {
+   flex: 1;
+   padding: 0.5rem;
+   border: 2px solid #007bff;
+   border-radius: 6px;
+   font-size: 0.875rem;
+   transition: var(--transition);
+ }
+
+ .rename-input:focus {
+   outline: none;
+   border-color: #0056b3;
+   box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+ }
+
+ .rename-input.is-invalid {
+   border-color: #dc3545;
+ }
+
+ .rename-actions {
+   display: flex;
+   gap: 0.25rem;
+ }
+
+ .rename-btn {
+   padding: 0.375rem 0.5rem;
+   border: none;
+   border-radius: 4px;
+   cursor: pointer;
+   transition: var(--transition);
+   font-size: 0.75rem;
+   min-width: 32px;
+   height: 32px;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+ }
+
+ .btn-rename-action:hover {
+   color: #3a86ff;
+ }
+
+
+
+ .rename-btn-confirm {
+   background: #28a745;
+   color: white;
+ }
+
+ .rename-btn-confirm:hover {
+   background: #218838;
+ }
+
+ .rename-btn-cancel {
+   background: #6c757d;
+   color: white;
+ }
+
+ .rename-btn-cancel:hover {
+   background: #5a6268;
+ }
+
+ .rename-btn:disabled {
+   opacity: 0.6;
+   cursor: not-allowed;
+ }
+
+ .file-item-editing {
+   background: #fff3cd !important;
+   border-left-color: #ffc107 !important;
+ }
+
+ .file-item-editing:hover {
+   background: #fff3cd !important;
+   transform: none;
+ }
+
+ .rename-error {
+   color: #dc3545;
+   font-size: 0.75rem;
+   margin-top: 0.25rem;
+ }
+
+ .fade-enter-active,
+ .fade-leave-active {
+   transition: opacity 0.3s ease;
+ }
+
+ .fade-enter-from,
+ .fade-leave-to {
+   opacity: 0;
+ }
+
  .whitelist-add-section {
    background: #f8f9fa;
    border-radius: 8px;
@@ -757,7 +868,7 @@
  }
 
  .modal-content-custom.unrenamed-modal {
-   max-width: 800px;
+   max-width: 900px;
    max-height: 90vh;
    display: flex;
    flex-direction: column;

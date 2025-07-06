@@ -81,6 +81,18 @@ def scheduled_scan() -> None:
         config_db.add_scan_history(error_result)
 
 
+def enrich_path_fields(entries: list[dict]) -> list[dict]:
+    enriched = []
+    for item in entries:
+        path_str = item.get("path")
+        if not path_str:
+            enriched.append(item)
+            continue
+        p = Path(path_str)
+        enriched.append({**item, "file_name": p.name, "file_directory": str(p.parent)})
+    return enriched
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -111,12 +123,14 @@ def get_status():
         next_run_time = "未启动"
     else:
         next_run_time = "未知"
-
+    last_scan = config_db.get_last_scan_result()
+    if last_scan and "unrenamed_files" in last_scan:
+        last_scan["unrenamed_files"] = enrich_path_fields(last_scan["unrenamed_files"])
     return jsonify(
         {
             "media_path": MEDIA_PATH,
             "scan_interval": SCAN_INTERVAL,
-            "last_scan": config_db.get_last_scan_result(),
+            "last_scan": last_scan,
             "scheduler_running": scheduler_state,
             "total_scans": config_db.get_scan_history_count(),
             "total_whitelist": len(config_db.get_whitelist()),
@@ -201,6 +215,59 @@ def scan_directory():
         return jsonify({"success": False, "message": str(exc)}), 200
 
 
+@app.route("/api/rename-file", methods=["POST"])
+def rename_file():
+    data = request.get_json(silent=True) or {}
+
+    file_path = data.get("file_path")
+    file_name = data.get("file_name")
+    new_file_name = data.get("new_file_name")
+
+    if not all([file_path, file_name, new_file_name]):
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "message": "缺少必要参数：file_path、file_name 或 new_file_name",
+                }
+            ),
+            200,
+        )
+
+    try:
+        from pathlib import Path
+
+        original_file = Path(file_path) / file_name
+        new_file = Path(file_path) / new_file_name
+
+        if not original_file.exists():
+            return (
+                jsonify({"success": False, "message": f"文件不存在: {original_file}"}),
+                200,
+            )
+
+        if new_file.exists():
+            return (
+                jsonify({"success": False, "message": f"目标文件已存在: {new_file}"}),
+                200,
+            )
+
+        original_file.rename(new_file)
+
+        return jsonify(
+            {
+                "success": True,
+                "old_path": str(original_file),
+                "new_path": str(new_file),
+                "message": "重命名成功",
+            }
+        )
+
+    except Exception as e:
+        app.logger.exception("文件重命名失败")
+        return jsonify({"success": False, "message": f"文件重命名失败: {str(e)}"}), 500
+
+
 @app.route("/api/rollback-season", methods=["POST"])
 def rollback_season():
     data = request.get_json(silent=True) or {}
@@ -279,7 +346,8 @@ def add_to_whitelist():
 def get_whitelist():
     try:
         entries = config_db.get_whitelist()
-        return jsonify({"success": True, "whitelist": entries})
+        enriched = enrich_path_fields(entries)
+        return jsonify({"success": True, "whitelist": enriched})
     except Exception as exc:
         app.logger.exception("Reading from whitelist failed")
         return jsonify({"success": False, "message": str(exc)}), 500
@@ -493,5 +561,5 @@ if __name__ == "__main__":
         app.logger.info(
             f"The scheduled task has been initiated, scan interval: {SCAN_INTERVAL}, first execution time: {get_aligned_start(SCAN_INTERVAL)}"
         )
-    port = int(os.getenv("FLASK_PORT", 15000))
-    app.run(host="0.0.0.0", port=port, debug=False)
+    port = int(os.getenv("FLASK_PORT", 15001))
+    app.run(host="0.0.0.0", port=port, debug=True)
