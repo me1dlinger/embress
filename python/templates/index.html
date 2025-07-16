@@ -417,7 +417,8 @@
                     <div class="card-header d-flex justify-content-between align-items-center">
                       <div class="d-flex align-items-center">
                         <i class="bi bi-list-ul me-2"></i>
-                        <span v-if="selectedShow.media_type">[[ selectedShow.media_type ]]/[[ selectedShow.show_name ]]
+                        <span v-if="selectedShow.media_type">[[ selectedShow.media_type ]] - [[ selectedShow.show_name
+                          ]]
                           - 变更记录</span>
                         <span v-else>节目变更记录</span>
                       </div>
@@ -450,7 +451,7 @@
                               <div class="flex-grow-1">
                                 <h6 class="mb-1 d-flex align-items-center copy-title">
                                   <i class="bi bi-tv me-2"></i>
-                                  [[ show.media_type ]]/[[ show.show_name ]]
+                                  [[ show.media_type ]] - [[ show.show_name ]]
                                 </h6>
                                 <div class="d-flex align-items-center gap-3">
                                   <span class="badge bg-primary">[[ show.record_count ]] 条记录</span>

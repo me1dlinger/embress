@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Set, Union
 from database import config_db
 import time
-from logging.handlers import RotatingFileHandler
+
 from logging_utils import get_logger
 
 LOGS_PATH = Path(os.getenv("LOG_PATH", "./data/logs"))
@@ -118,21 +118,24 @@ class EmbressRenamer:
 
     def _extract_episode_info(
         self, filename: str
-    ) -> Optional[Tuple[Optional[int], int]]:
+    ) -> Optional[Tuple[Optional[int], Union[int, float], Optional[Tuple[int, int]]]]:
+        """提取集数信息，返回 (季数, 集数, 匹配位置)"""
         p_cfg = RegexLoader.patterns()
-        # (季,集)
+        
+        # (季,集) 模式
         for pat in p_cfg.get("season_episode", []):
             if m := re.search(pat, filename, re.I):
                 season = int(m.group(1))
                 episode = float(m.group(2)) if "." in m.group(2) else int(m.group(2))
-                return season, episode
+                return season, episode, m.span()
 
-        # 仅集数
+        # 仅集数模式
         for pat in p_cfg.get("episode_only", []):
             if m := re.search(pat, filename, re.I):
                 episode_str = m.group(1)
                 episode = float(episode_str) if "." in episode_str else int(episode_str)
-                return None, episode
+                return None, episode, m.span()
+        
         return None
 
     def _get_season_from_path(self, file_path: Path) -> Optional[int]:
@@ -142,7 +145,8 @@ class EmbressRenamer:
         return None
 
     def _generate_new_filename(
-        self, original: str, season: Optional[int], episode: Union[int, float]
+        self, original: str, season: Optional[int], episode: Union[int, float], 
+        match_span: Optional[Tuple[int, int]] = None
     ) -> str:
         season_fmt = season if season is not None else 1
         ep_fmt = (
@@ -151,14 +155,30 @@ class EmbressRenamer:
             else f"{episode:02d}"
         )
         new_seg = f"S{season_fmt:02d}E{ep_fmt}"
-        new = original
-
-        # 已含 SxxEyy 或 SxxEyy.y → 不动
-        if re.search(rf"\[{new_seg}\]", new, re.I) or re.search(
-            rf"\bS{season_fmt:02d}E{ep_fmt}\b", new, re.I
+        if re.search(rf"\[{re.escape(new_seg)}\]", original, re.I) or re.search(
+            rf"\bS{season_fmt:02d}E{re.escape(ep_fmt)}\b", original, re.I
         ):
-            return new
-
+            return original
+        if match_span:
+            start, end = match_span
+            before_char = original[start-1] if start > 0 else ""
+            after_char = original[end] if end < len(original) else ""
+            if before_char in "[-":
+                replacement = f"[{new_seg}]"
+            elif before_char == " " and after_char in " ([":
+                replacement = f"[{new_seg}]"
+            elif re.match(r"[SE]", original[start:end], re.I):
+                replacement = new_seg
+            else:
+                replacement = f"[{new_seg}]"
+            
+            new_filename = original[:start] + replacement + original[end:]
+            print(new_filename)
+            return self._normalize_filename(new_filename)
+        
+        # 原有的逻辑作为兜底
+        new = original
+        
         # 示例：- 6.5 → - [S01E6.5]
         new2 = re.sub(
             r"-\s*\d{1,3}(?:\.\d)?(?=\s+(?:\[|\(|[A-Za-z]))",
@@ -183,7 +203,7 @@ class EmbressRenamer:
         if new2 != new:
             return self._normalize_filename(new2)
 
-        # “[数字]” → “[SxxEyy]”
+        # "[数字]" → "[SxxEyy]"
         matches = list(re.finditer(r"\[(\d{1,3}(?:\.\d)?)\]", new))
         if matches:
             s, e = matches[-1].span()
@@ -1026,9 +1046,11 @@ class EmbressRenamer:
             )
             return file_info, [], False
 
-        season_num, ep_num = episode_info
+        season_num, ep_num, match_span = episode_info
         effective_season = season_num or season_num_hint
-        new_name = self._generate_new_filename(file_path.name, effective_season, ep_num)
+        new_name = self._generate_new_filename(
+            file_path.name, effective_season, ep_num, match_span
+        )
         if new_name == file_path.name:
             file_info.update({"status": STATUS_SKIP, "reason": "no_rename_needed"})
             changes = self._build_skip_record(file_path.name)

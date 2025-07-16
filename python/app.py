@@ -545,11 +545,38 @@ def get_aligned_start(interval_seconds: int) -> datetime:
 
     return aligned_time
 
+def clean_old_logs():
+    """清理超过5天的日志文件"""
+    log_dir = Path(LOGS_PATH)
+    if not log_dir.exists():
+        return
+    cutoff_time = datetime.now() - timedelta(days=5)
+    deleted_files = []
+    
+    for log_file in log_dir.glob("*.log"):
+        # 只处理emby_renamer_和app_开头的日志文件
+        if not (log_file.name.startswith("emby_renamer_") or log_file.name.startswith("app_")):
+            continue
+            
+        # 获取文件修改时间
+        mtime = datetime.fromtimestamp(log_file.stat().st_mtime)
+        if mtime < cutoff_time:
+            try:
+                log_file.unlink()
+                deleted_files.append(log_file.name)
+            except Exception as e:
+                app.logger.error(f"Failed to delete old log file {log_file.name}: {str(e)}")
+    
+    if deleted_files:
+        app.logger.info(f"Deleted {len(deleted_files)} old log files: {', '.join(deleted_files)}")
+    else:
+        app.logger.debug("No old log files to delete")
 
 if __name__ == "__main__":
     setup_logging()
 
     init_change_record()
+    clean_old_logs()
     if not scheduler.running:
         scheduler.add_job(
             func=scheduled_scan,
@@ -558,6 +585,15 @@ if __name__ == "__main__":
             id="scan_job",
             name="文件扫描任务",
             start_date=get_aligned_start(SCAN_INTERVAL),
+            replace_existing=True,
+        )
+        scheduler.add_job(
+            func=clean_old_logs,
+            trigger="cron",
+            hour=1,
+            minute=0,
+            id="log_cleanup_job",
+            name="日志清理任务",
             replace_existing=True,
         )
         scheduler.start()
