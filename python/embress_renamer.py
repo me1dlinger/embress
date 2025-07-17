@@ -135,7 +135,7 @@ class EmbressRenamer:
                 episode_str = m.group(1)
                 episode = float(episode_str) if "." in episode_str else int(episode_str)
                 return None, episode, m.span()
-        
+
         return None
 
     def _get_season_from_path(self, file_path: Path) -> Optional[int]:
@@ -145,8 +145,11 @@ class EmbressRenamer:
         return None
 
     def _generate_new_filename(
-        self, original: str, season: Optional[int], episode: Union[int, float], 
-        match_span: Optional[Tuple[int, int]] = None
+        self,
+        original: str,
+        season: Optional[int],
+        episode: Union[int, float],
+        match_span: Optional[Tuple[int, int]] = None,
     ) -> str:
         season_fmt = season if season is not None else 1
         ep_fmt = (
@@ -161,24 +164,20 @@ class EmbressRenamer:
             return original
         if match_span:
             start, end = match_span
-            before_char = original[start-1] if start > 0 else ""
-            after_char = original[end] if end < len(original) else ""
-            if before_char in "[-":
-                replacement = f"[{new_seg}]"
-            elif before_char == " " and after_char in " ([":
-                replacement = f"[{new_seg}]"
-            elif re.match(r"[SE]", original[start:end], re.I):
-                replacement = new_seg
-            else:
-                replacement = f"[{new_seg}]"
-            
-            new_filename = original[:start] + replacement + original[end:]
-            print(new_filename)
-            return self._normalize_filename(new_filename)
-        
+            matched_text = original[start:end]
+            inner_match = re.search(r"\d{1,3}(?:\.\d)?", matched_text)
+            if inner_match:
+                inner_start, inner_end = inner_match.span()
+                absolute_start = start + inner_start
+                absolute_end = start + inner_end
+                new_filename = (
+                    original[:absolute_start] + f"[{new_seg}]" + original[absolute_end:]
+                )
+                return self._normalize_filename(new_filename)
+
         # 原有的逻辑作为兜底
         new = original
-        
+
         # 示例：- 6.5 → - [S01E6.5]
         new2 = re.sub(
             r"-\s*\d{1,3}(?:\.\d)?(?=\s+(?:\[|\(|[A-Za-z]))",
