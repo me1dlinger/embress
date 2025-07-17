@@ -16,6 +16,10 @@ new Vue({
     statusLoading: false,
     lastScanResult: null,
 
+    showScanIntervalModal: false,
+    scanInterval: 600,
+    scanIntervalLoading: false,
+    scanIntervalError: "",
     // 扫描相关
     scanLoading: false,
 
@@ -389,6 +393,7 @@ new Vue({
       try {
         const data = await this.auth_fetch("/api/status");
         this.systemStatus = data;
+        this.scanInterval = data.scan_interval;
         if (data.last_scan) {
           this.lastScanResult = data.last_scan;
         }
@@ -415,6 +420,71 @@ new Vue({
         this.systemStatus = null;
       } finally {
         this.statusLoading = false;
+      }
+    },
+    openScanIntervalModal() {
+      this.scanInterval = this.systemStatus.scan_interval;
+      this.showScanIntervalModal = true;
+    },
+    formatInterval(seconds) {
+      if (!seconds) return "";
+      if (seconds < 60) return `${seconds}秒`;
+      if (seconds < 3600) return `${Math.floor(seconds / 60)}分钟`;
+      if (seconds < 86400) return `${Math.floor(seconds / 3600)}小时`;
+      return `${Math.floor(seconds / 86400)}天`;
+    },
+    async updateScanInterval() {
+      if (
+        !this.scanInterval ||
+        this.scanInterval < 60 ||
+        this.scanInterval > 86400
+      ) {
+        this.scanIntervalError = "请输入60-86400秒之间的值";
+        return;
+      }
+
+      this.scanIntervalLoading = true;
+      this.scanIntervalError = "";
+
+      try {
+        const result = await this.auth_fetch("/api/config/scan-interval", {
+          method: "POST",
+          body: JSON.stringify({ scan_interval: this.scanInterval }),
+        });
+        if (result.success) {
+          this.showSuccess("扫描间隔已更新", "配置成功");
+          this.loadSystemStatus();
+          this.showScanIntervalModal = false;
+        } else {
+          this.showModalComponent(
+            "error",
+            "配置失败",
+            data.message ? data.message : "未知错误",
+            "bi-x-circle"
+          );
+        }
+      } catch (error) {
+        if (error.status === 401) {
+          // 鉴权失败逻辑
+          this.isAuthenticated = false;
+          localStorage.removeItem("access_key");
+          this.authError = "未授权或密钥无效";
+          this.showModalComponent(
+            "error",
+            "认证失败",
+            "Access Key 无效或已过期，请重新登录。",
+            "bi-lock"
+          );
+        } else {
+          this.showModalComponent(
+            "error",
+            "请求失败",
+            "请求失败: 网络错误",
+            "bi-x-circle"
+          );
+        }
+      } finally {
+        this.scanIntervalLoading = false;
       }
     },
     async toogleSchedulerState() {

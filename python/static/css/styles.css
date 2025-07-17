@@ -206,7 +206,17 @@
    font-weight: 700;
    color: var(--primary);
  }
+.scan-interval-input {
+  font-size: 1.1rem;
+  padding: 0.75rem 1rem;
+  text-align: center;
+}
 
+.scan-interval-preview {
+  font-size: 0.9rem;
+  color: #6c757d;
+  margin-top: 0.5rem;
+}
  /* 按钮样式 */
  .btn {
    border-radius: 8px;
@@ -653,7 +663,7 @@
 
  .modal-content-custom {
    width: 100%;
-   max-width: 500px;
+   max-width: 700px;
    background: #fff;
    border-radius: 12px;
    box-shadow: var(--card-hover-shadow);
@@ -1179,7 +1189,7 @@
    border-radius: 12px;
    box-shadow: var(--card-hover-shadow);
    width: 100%;
-   max-width: 500px;
+   max-width: 700px;
    overflow: hidden;
    transform: translateY(20px);
    opacity: 0;

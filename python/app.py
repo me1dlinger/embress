@@ -315,6 +315,72 @@ def update_regex_patterns():
         return jsonify({"success": False, "message": str(exc)}), 500
 
 
+@app.route("/api/config/scan-interval", methods=["POST"])
+def update_scan_interval():
+    """更新扫描间隔配置并重新调度任务"""
+    global SCAN_INTERVAL
+
+    data = request.get_json(silent=True) or {}
+    new_interval = data.get("scan_interval")
+
+    if not new_interval:
+        return jsonify({"success": False, "message": "缺少 scan_interval 参数"}), 200
+    try:
+        new_interval = int(new_interval)
+    except ValueError:
+        return jsonify({"success": False, "message": "scan_interval 必须是整数"}), 200
+
+    try:
+        # 更新全局变量
+        SCAN_INTERVAL = new_interval
+
+        # 获取当前任务
+        job = scheduler.get_job("scan_job")
+
+        if job:
+            # 更新任务间隔
+            scheduler.reschedule_job(
+                "scan_job",
+                trigger="interval",
+                seconds=SCAN_INTERVAL,
+                start_date=get_aligned_start(SCAN_INTERVAL),
+            )
+            app.logger.info(
+                f"已更新扫描间隔为 {SCAN_INTERVAL} 秒，下次执行时间: {get_aligned_start(SCAN_INTERVAL)}"
+            )
+        else:
+            # 如果任务不存在，创建新任务
+            scheduler.add_job(
+                func=scheduled_scan,
+                trigger="interval",
+                seconds=SCAN_INTERVAL,
+                id="scan_job",
+                name="文件扫描任务",
+                start_date=get_aligned_start(SCAN_INTERVAL),
+                replace_existing=True,
+            )
+            app.logger.info(
+                f"已创建新的扫描任务，间隔为 {SCAN_INTERVAL} 秒，首次执行时间: {get_aligned_start(SCAN_INTERVAL)}"
+            )
+
+        return jsonify(
+            {
+                "success": True,
+                "scan_interval": SCAN_INTERVAL,
+                "next_run_time": get_aligned_start(SCAN_INTERVAL).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                ),
+                "message": f"扫描间隔已更新为 {SCAN_INTERVAL} 秒",
+            }
+        )
+    except Exception as e:
+        app.logger.error(f"更新扫描间隔失败: {str(e)}")
+        return (
+            jsonify({"success": False, "message": f"更新扫描间隔失败: {str(e)}"}),
+            200,
+        )
+
+
 @app.route("/api/whitelist", methods=["POST"])
 def add_to_whitelist():
     data = request.get_json(silent=True) or {}
@@ -396,12 +462,19 @@ def get_change_records_by_show():
         for record in records:
             try:
                 absolute_path = Path(record["path"]).resolve()
+                season_absolute_path = Path(record["season_dir"]).resolve()
                 record["relative_path"] = str(
                     absolute_path.relative_to(media_root_path)
+                )
+                record["season_relative_path"] = str(
+                    season_absolute_path.relative_to(media_root_path)
                 )
             except ValueError:
                 media_str = str(media_root_path)
                 record["relative_path"] = record["path"].replace(media_str + os.sep, "")
+                record["season_relative_path"] = record["season_dir"].replace(
+                    media_str + os.sep, ""
+                )
         return jsonify({"records": records, "total": len(records)})
     except Exception as e:
         app.logger.error(f"Failed to get change records for show {show_name}: {e}")
@@ -545,6 +618,7 @@ def get_aligned_start(interval_seconds: int) -> datetime:
 
     return aligned_time
 
+
 def clean_old_logs():
     """清理超过5天的日志文件"""
     log_dir = Path(LOGS_PATH)
@@ -552,12 +626,15 @@ def clean_old_logs():
         return
     cutoff_time = datetime.now() - timedelta(days=5)
     deleted_files = []
-    
+
     for log_file in log_dir.glob("*.log"):
         # 只处理emby_renamer_和app_开头的日志文件
-        if not (log_file.name.startswith("emby_renamer_") or log_file.name.startswith("app_")):
+        if not (
+            log_file.name.startswith("emby_renamer_")
+            or log_file.name.startswith("app_")
+        ):
             continue
-            
+
         # 获取文件修改时间
         mtime = datetime.fromtimestamp(log_file.stat().st_mtime)
         if mtime < cutoff_time:
@@ -565,12 +642,17 @@ def clean_old_logs():
                 log_file.unlink()
                 deleted_files.append(log_file.name)
             except Exception as e:
-                app.logger.error(f"Failed to delete old log file {log_file.name}: {str(e)}")
-    
+                app.logger.error(
+                    f"Failed to delete old log file {log_file.name}: {str(e)}"
+                )
+
     if deleted_files:
-        app.logger.info(f"Deleted {len(deleted_files)} old log files: {', '.join(deleted_files)}")
+        app.logger.info(
+            f"Deleted {len(deleted_files)} old log files: {', '.join(deleted_files)}"
+        )
     else:
         app.logger.debug("No old log files to delete")
+
 
 if __name__ == "__main__":
     setup_logging()

@@ -142,7 +142,9 @@
                         <div class="row mt-2">
                           <div class="col-6"><strong>扫描间隔:</strong></div>
                           <div class="col-6">
-                            [[ systemStatus.scan_interval ]] 秒
+                            <span class="badge bg-secondary" @click="openScanIntervalModal" class="col-6">
+                              [[ formatInterval(systemStatus.scan_interval) ]]
+                            </span>
                           </div>
                         </div>
                         <div class="row mt-2">
@@ -566,7 +568,13 @@
                                 <h6 class="mb-0">
                                   <i :class="groupBy === 'type' ? getTypeIcon(groupKey) : getSeasonIcon(groupKey)"
                                     class="me-2"></i>
-                                  [[ groupBy === 'type' ? getTypeLabel(groupKey) : groupKey ]]
+                                  <span v-if="groupBy === 'type'">
+                                    [[getTypeLabel(groupKey)]]
+                                  </span>
+                                  <span v-else-if="records.length>0"
+                                    @click.stop="copyText(records[0].season_relative_path)"
+                                    :title="'点击复制路径:'+records[0].season_relative_path">[[groupKey]] </span>
+                                  <span v-else>[[groupKey]] </span>
                                   <span class="badge bg-light text-dark ms-2">[[ records.length ]]</span>
                                 </h6>
                               </div>
@@ -582,9 +590,11 @@
                                         </span>
                                         <i v-else class="bi"
                                           :class="record.status === 'success' ? 'bi-check-circle text-success' : 'bi-x-circle text-danger'"></i>
-                                        <span v-if="groupBy === 'season'">[[ getTypeLabel(record.type) ]] - </span>
-                                        <!-- <span v-else>[[ record.show_name ]] - </span> -->
-                                        [[ record.season_name ]]
+                                        <span v-if="groupBy === 'season'">[[ getTypeLabel(record.type) ]] -
+                                        </span>
+                                        <span @click.stop="copyText(record.season_relative_path)"
+                                          :title="'点击复制路径:'+record.season_relative_path"> [[ record.season_name
+                                          ]]</span>
                                       </h6>
                                       <div class="file-info">
                                         <div v-if="record.type === 'nfo_delete'" class="mb-1">
@@ -752,6 +762,7 @@
         </div>
       </div>
     </div>
+
     <div class="toast-container">
       <div v-for="toast in toasts" :key="toast.id" class="toast-item"
         :class="['toast-' + toast.type, { 'toast-show': toast.visible }]" @click="removeToast(toast.id)">
@@ -768,6 +779,42 @@
         <div class="toast-progress" :style="{ animationDuration: toast.duration + 'ms' }"></div>
       </div>
     </div>
+    <transition name="fade">
+      <div v-if="showScanIntervalModal" class="modal-overlay" @click.self="showScanIntervalModal = false"
+        @keydown.esc="showScanIntervalModal = false" tabindex="0">
+        <div class="modal-content-custom animated">
+          <div class="modal-header">
+            <h5 class="modal-title">
+              <i class="bi bi-clock me-2"></i> 扫描间隔配置
+            </h5>
+            <button type="button" class="btn-close" @click="showScanIntervalModal = false"></button>
+          </div>
+
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label fw-medium">扫描间隔（秒）</label>
+              <input type="number" class="form-control" v-model.number="scanInterval" min="20" max="86400"
+                placeholder="请输入扫描间隔（60-86400秒）">
+              <div class="form-text">
+                当前设置：[[ formatInterval(scanInterval) ]]
+              </div>
+            </div>
+
+            <div v-if="scanIntervalError" class="alert alert-danger py-2">
+              <i class="bi bi-exclamation-circle me-2"></i>
+              [[ scanIntervalError ]]
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button class="btn btn-primary" @click="updateScanInterval" :disabled="scanIntervalLoading">
+              <span v-if="scanIntervalLoading" class="spinner-border spinner-border-sm"></span>
+              <span v-else>保存</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
     <transition name="fade">
       <div v-if="showSubPathModal" class="modal-overlay" @click.self="closeSubPathModal"
         @keydown.esc="closeSubPathModal" tabindex="0">
