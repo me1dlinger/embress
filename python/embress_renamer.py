@@ -121,7 +121,7 @@ class EmbressRenamer:
     ) -> Optional[Tuple[Optional[int], Union[int, float], Optional[Tuple[int, int]]]]:
         """提取集数信息，返回 (季数, 集数, 匹配位置)"""
         p_cfg = RegexLoader.patterns()
-        
+
         # (季,集) 模式
         for pat in p_cfg.get("season_episode", []):
             if m := re.search(pat, filename, re.I):
@@ -158,13 +158,23 @@ class EmbressRenamer:
             else f"{episode:02d}"
         )
         new_seg = f"S{season_fmt:02d}E{ep_fmt}"
+
+        # 检查是否已经是期望的格式
         if re.search(rf"\[{re.escape(new_seg)}\]", original, re.I) or re.search(
             rf"\bS{season_fmt:02d}E{re.escape(ep_fmt)}\b", original, re.I
         ):
             return original
+
         if match_span:
             start, end = match_span
             matched_text = original[start:end]
+
+            # 如果匹配的是 [数字] 格式，直接替换整个匹配部分
+            if re.match(r"\[\d{1,3}(?:\.\d)?\]", matched_text):
+                new_filename = original[:start] + f"[{new_seg}]" + original[end:]
+                return self._normalize_filename(new_filename)
+
+            # 如果匹配的是其他格式，找到数字部分进行替换
             inner_match = re.search(r"\d{1,3}(?:\.\d)?", matched_text)
             if inner_match:
                 inner_start, inner_end = inner_match.span()
