@@ -126,7 +126,7 @@ LOG_PATH:程序日志配置，默认/app/python/logs
 version: "3"
 services:
   embresse:
-    image: embress
+    image: meidlinger1024/embress:latest
     container_name: embress
     restart: always
     ports:
