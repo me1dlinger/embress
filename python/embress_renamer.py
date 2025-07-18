@@ -164,7 +164,6 @@ class EmbressRenamer:
             rf"\bS{season_fmt:02d}E{re.escape(ep_fmt)}\b", original, re.I
         ):
             return original
-
         if match_span:
             start, end = match_span
             matched_text = original[start:end]
@@ -526,7 +525,7 @@ class EmbressRenamer:
             processed: Set[Tuple[str, str]] = set()
 
             for record in records:
-                if record.get("status") == "success":
+                if record.get("status") == "success" or record.get("status") == "skip":
                     processed.add((record["path"], record.get("new", "")))
 
             return processed

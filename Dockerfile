@@ -18,10 +18,13 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime
 # 创建目录结构
 RUN mkdir -p /app/python
 RUN mkdir -p /app/media
+RUN mkdir -p /app/conf
 
 # 复制脚本和API文件
 COPY /python /app/python
 COPY conf/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY conf/regex_pattern.json /app/conf/regex_pattern.json
+
 RUN chmod +x /app/python/app.py
 RUN chmod +x /app/python/embress_renamer.py
 RUN chmod +x /app/python/database.py

@@ -545,69 +545,6 @@ def setup_logging() -> None:
     werkzeug_logger.propagate = False
 
 
-def init_change_record():
-    try:
-        if config_db._init_change_record_table():
-            app.logger.info(
-                "The change_record table already exists, skip initialization"
-            )
-        else:
-            app.logger.info(
-                "The change_record table does not exist. Create a table and migrate historical data"
-            )
-
-            media_path = Path(MEDIA_PATH)
-            if not media_path.exists():
-                app.logger.warning(f"The media path not found: {MEDIA_PATH}")
-                return
-            all_records = []
-            for media_type_dir in media_path.iterdir():
-                if not media_type_dir.is_dir():
-                    continue
-                for show_dir in media_type_dir.iterdir():
-                    if not show_dir.is_dir():
-                        continue
-                    for season_dir in show_dir.iterdir():
-                        if not season_dir.is_dir():
-                            continue
-                        record_file = season_dir / "rename_record.json"
-                        if not record_file.exists():
-                            continue
-                        try:
-                            season_records = json.loads(
-                                record_file.read_text(encoding="utf-8")
-                            )
-                            for rec in season_records:
-                                if (
-                                    rec.get("show_name") == None
-                                    or rec.get("season_name") is None
-                                    or rec.get("media_type") is None
-                                ):
-                                    rec["show_name"] = show_dir.name
-                                    rec["season_name"] = season_dir.name
-                                    rec["media_type"] = media_type_dir.name
-                                    rec["season_dir"] = str(season_dir.absolute())
-                            all_records.extend(season_records)
-                            app.logger.info(
-                                f"Read {len(season_records)} records from  {record_file}"
-                            )
-                        except Exception as e:
-                            app.logger.error(
-                                f"Failed to read change record: {record_file}: {e}"
-                            )
-            if all_records:
-                app.logger.info(
-                    f"Read {len(all_records)} records to the change_decord table"
-                )
-                config_db.add_change_records(all_records)
-            else:
-                app.logger.info("No readable records found")
-            app.logger.info("change_record initialization successful")
-    except Exception as exc:
-        app.logger.error(f"change_record initialization failed: {exc}")
-        raise RuntimeError("Unable to initialize change_record") from exc
-
-
 def get_aligned_start(interval_seconds: int) -> datetime:
     now = datetime.now()
     anchor = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -656,8 +593,6 @@ def clean_old_logs():
 
 if __name__ == "__main__":
     setup_logging()
-
-    init_change_record()
     clean_old_logs()
     if not scheduler.running:
         scheduler.add_job(

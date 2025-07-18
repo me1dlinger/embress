@@ -36,28 +36,41 @@ def retry_db_operation(max_retries=3, delay=0.1):
 
 
 CONFIG_DB_PATH = os.getenv("CONFIG_DB_PATH", "data/conf/config.db")
+DEFAULT_REGEX_PATH = os.getenv("DEFAULT_REGEX_PATH", "/app/conf/regex_pattern.json")
 
-DEFAULT_REGEX = {
-    "episode_only": [
-        r"\[(\d{1,3}(?:\.\d)?)\]",
-        r"第(\d{1,3}(?:\.\d)?)集",
-        r"Episode\s(\d{1,3}(?:\.\d)?)",
-        r"-\s(\d{1,3}(?:\.\d)?)\s-",
-        r"(?<![a-zA-Z0-9])E(\d{1,3}(?:\.\d)?)(?!\d)",
-        r"-\s(\d{1,3}(?:\.\d)?)(?=\s|\.|\[|$)",
-        r"\s+(\d{1,3}(?:\.\d)?)(?=\s\[)",
-        r"\s(\d{1,3}(?:\.\d)?)(?=\s\()",
-    ],
-    "season_episode": [
-        r"\[S(\d{1,2})E(\d{1,3}(?:\.\d)?)\]",
-        r"[Ss](\d{1,2})[Ee](\d{1,3}(?:\.\d)?)",
-        r"第(\d{1,2})季.?第(\d{1,3}(?:\.\d)?)集",
-        r"Season\s(\d{1,2}).?Episode\s(\d{1,3}(?:\.\d)?)",
-        r"\[(\d{1,2})\]\[(\d{1,3}(?:\.\d)?)\]",
-        r"-\s(\d{1,2})\s-\s*(\d{1,3}(?:\.\d)?)",
-        r"\.(\d{1,2})\.(\d{1,3}(?:\.\d)?)\.",
-    ],
-}
+
+def load_regex_from_file():
+    try:
+        if os.path.exists(DEFAULT_REGEX_PATH):
+            with open(DEFAULT_REGEX_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"加载正则表达式文件失败: {e}")
+    return {
+        "episode_only": [
+            r"\[(\d{1,3}(?:\.\d)?)\]",
+            r"第(\d{1,3}(?:\.\d)?)集",
+            r"Episode\s(\d{1,3}(?:\.\d)?)",
+            r"-\s(\d{1,3}(?:\.\d)?)\s-",
+            r"(?<![a-zA-Z0-9])E(\d{1,3}(?:\.\d)?)(?!\d)",
+            r"-\s(\d{1,3}(?:\.\d)?)(?=\s|\.|\[|$)",
+            r"\s+(\d{1,3}(?:\.\d)?)(?=\s\[)",
+            r"\s(\d{1,3}(?:\.\d)?)(?=\s\()",
+            r"(?<=\.)(\d{2,3})(?=\.[A-Za-z][a-zA-Z])",
+        ],
+        "season_episode": [
+            r"\[S(\d{1,2})E(\d{1,3}(?:\.\d)?)\]",
+            r"[Ss](\d{1,2})[Ee](\d{1,3}(?:\.\d)?)",
+            r"第(\d{1,2})季.?第(\d{1,3}(?:\.\d)?)集",
+            r"Season\s(\d{1,2}).?Episode\s(\d{1,3}(?:\.\d)?)",
+            r"\[(\d{1,2})\]\[(\d{1,3}(?:\.\d)?)\]",
+            r"-\s(\d{1,2})\s-\s*(\d{1,3}(?:\.\d)?)",
+            r"\.(\d{1,2})\.(\d{1,3}(?:\.\d)?)\.",
+        ],
+    }
+
+
+DEFAULT_REGEX = load_regex_from_file()
 
 
 # ========= 数据库单例 ========= #

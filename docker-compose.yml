@@ -13,8 +13,9 @@ services:
       - _conf_path:/app/conf
     environment:
       - TZ=Asia/Shanghai
-      - ACCESS_KEY=ACCESS_KEY
+      - ACCESS_KEY=12345
       - MEDIA_PATH=/app/media
       - CONFIG_DB_PATH=/app/conf/config.db
+      - DEFAULT_REGEX_PATH=/app/conf/regex_pattern.json
       - LOG_PATH=/app/python/logs
       - SCAN_INTERVAL=3600
