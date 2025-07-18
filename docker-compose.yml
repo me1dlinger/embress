@@ -1,15 +1,16 @@
 version: "3"
 services:
-  embress:
+  embresse:
     image: meidlinger1024/embress:latest
     container_name: embress
     restart: always
     ports:
       - "15000:15000"
     volumes:
-      - D:\Code\Tools\embress\data\media\A:/app/media/path1
-      - D:\Code\Tools\embress\data\logs:/app/python/logs
-      - D:\Code\Tools\embress\data\conf:/app/conf
+      - _media_path1:/app/media/path1
+      - _media_path2:/app/media/path2
+      - _logs_path:/app/python/logs
+      - _conf_path:/app/conf
     environment:
       - TZ=Asia/Shanghai
       - ACCESS_KEY=ACCESS_KEY
