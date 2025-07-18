@@ -130,7 +130,7 @@ LOG_PATH:app-log directory, (default: /app/python/logs)
 version: "3"
 services:
   embresse:
-    image: embress
+    image: meidlinger1024/embress:latest
     container_name: embress
     restart: always
     ports:
