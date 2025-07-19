@@ -75,6 +75,12 @@ new Vue({
     regexLoading: false,
     regexSaving: false,
     regexError: "",
+
+    showRegexDebugModal: false,
+    debugFileName: "",
+    debugResults: [],
+    debugLoading: false,
+
     newWhitelistPath: "",
     newWhitelistType: "file",
     newWhitelistItems: [],
@@ -1349,6 +1355,93 @@ new Vue({
     closeRegexModal() {
       this.showRegexModal = false;
       this.regexError = "";
+    },
+    openRegexDebugModal() {
+      this.showRegexDebugModal = true;
+      this.debugFileName = "";
+      this.debugResults = [];
+    },
+
+    closeRegexDebugModal() {
+      this.showRegexDebugModal = false;
+    },
+
+    createRegex(pattern) {
+      try {
+        return new RegExp(pattern, "i");
+      } catch (e) {
+        // 如果正则表达式无效，尝试转义特殊字符
+        try {
+          const escaped = pattern.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&");
+          return new RegExp(escaped, "i");
+        } catch (e) {
+          console.error("无法创建正则表达式:", pattern);
+          return null;
+        }
+      }
+    },
+
+    runDebug() {
+      if (!this.debugFileName) return;
+
+      this.debugLoading = true;
+      this.debugResults = [];
+
+      try {
+        // 测试所有正则表达式
+        const allPatterns = [
+          ...this.regexPatterns.episode_only.map((p) => ({
+            type: "episode_only",
+            pattern: p,
+          })),
+          ...this.regexPatterns.season_episode.map((p) => ({
+            type: "season_episode",
+            pattern: p,
+          })),
+        ];
+
+        // 先收集所有结果
+        let results = [];
+        for (const item of allPatterns) {
+          const regex = this.createRegex(item.pattern);
+          const result = regex ? this.debugFileName.match(regex) : null;
+
+          results.push({
+            type: item.type,
+            pattern: item.pattern,
+            matched: result !== null,
+            fullMatch: result ? result[0] : null,
+            groups: result ? result.slice(1) : [],
+            error: !regex ? "无效的正则表达式" : null,
+            // 添加排序权重
+            sortWeight: result ? result[0].length * 10 + result.length : 0,
+          });
+        }
+
+        // 对结果进行排序 - 匹配成功的优先，然后按匹配长度和捕获组数量排序
+        this.debugResults = results.sort((a, b) => {
+          if (a.matched !== b.matched) {
+            return b.matched - a.matched; // 匹配的排在前面
+          }
+          if (a.matched && b.matched) {
+            return b.sortWeight - a.sortWeight; // 匹配长度更长的优先
+          }
+          return 0;
+        });
+      } catch (error) {
+        console.error("调试出错:", error);
+        this.showError("调试过程中出错", "调试错误");
+      } finally {
+        this.debugLoading = false;
+
+        // 自动滚动到顶部
+        this.$nextTick(() => {
+          const container = document.querySelector(".debug-results");
+          if (container) {
+            container.scrollTop = 0;
+          }
+        });
+      }
     },
     async toggleFilter() {
       this.showFilteredOnly = !this.showFilteredOnly;

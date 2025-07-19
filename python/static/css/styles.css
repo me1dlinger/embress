@@ -1051,6 +1051,41 @@
    color: #6c757d;
  }
 
+ .debug-results {
+   max-height: 60vh;
+   overflow-y: auto;
+   padding-right: 8px;
+ }
+
+ /* 手风琴样式调整 */
+ .accordion-button {
+   padding: 0.75rem 1.25rem;
+   font-size: 0.95rem;
+ }
+
+ .accordion-button:not(.collapsed) {
+   background-color: #f8f9fa;
+   box-shadow: inset 0 -1px 0 rgba(0, 0, 0, .125);
+ }
+
+ .accordion-body {
+   padding: 1.25rem;
+ }
+
+ /* 代码块样式 */
+ code {
+   font-family: 'Fira Code', 'Courier New', monospace;
+   font-size: 0.9em;
+   color: #d63384;
+ }
+
+ .debug-group-item {
+   background-color: #f8f9fa;
+   border-radius: 4px;
+   padding: 0.5rem;
+ }
+
+
  /* 表单文本提示 */
  .form-text {
    font-size: 0.85rem;

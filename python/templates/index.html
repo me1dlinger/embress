@@ -1090,9 +1090,13 @@
           <div class="modal-header">
             <h5 class="modal-title">
               <i class="bi bi-code-slash me-2"></i> 正则表达式配置
+              <button type="button" class="btn btn-sm regex-upload-btn me-2" @click="openRegexDebugModal">
+                <i class="bi bi-bug me-2"></i> 调试正则
+              </button>
               <button type="button" class="btn btn-sm regex-upload-btn me-2" @click="triggerImportFile">
                 <i class="bi bi-upload me-2"></i> 导入配置
               </button>
+
             </h5>
             <input ref="importFileInput" type="file" accept=".json" @change="handleImportFile" style="display: none">
             <button type="button" class="btn-close btn-sm me-2 " @click="closeRegexModal"></button>
@@ -1116,7 +1120,7 @@
                         <i class="bi bi-plus-circle me-1"></i> 添加
                       </button>
                     </div>
-                    <p class="form-text mb-3">用于识别只包含集数的文件名格式，如 第01话</p>
+                    <p class="form-text mb-3">用于识别只包含集数的文件名格式，如 第01集</p>
 
                     <div class="regex-list">
                       <div v-for="(pattern, index) in regexPatterns.episode_only" :key="index" class="regex-item">
@@ -1177,13 +1181,95 @@
               </div>
             </div>
           </div>
-
           <div class="modal-footer">
             <button class="btn btn-primary" @click="saveRegexPatterns" :disabled="regexSaving || regexLoading">
               <span v-if="regexSaving" class="spinner-border spinner-border-sm me-2"></span>
               <i v-else class="bi bi-check-circle me-2"></i>
               [[ regexSaving ? '保存中...' : '保存配置' ]]
             </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+    <!-- 正则调试弹窗 -->
+    <transition name="fade">
+      <div v-if="showRegexDebugModal" class="modal-overlay" @click.self="closeRegexDebugModal"
+        @keydown.esc="closeRegexDebugModal" tabindex="0">
+        <div class="modal-content-custom animated" style="max-width: 800px;">
+          <div class="modal-header">
+            <h5 class="modal-title">
+              <i class="bi bi-bug me-2"></i> 正则表达式调试器
+            </h5>
+            <button type="button" class="btn-close" @click="closeRegexDebugModal"></button>
+          </div>
+
+          <div class="modal-body">
+            <div class="mb-4">
+              <label class="form-label fw-medium">测试文件名</label>
+              <div class="input-group">
+                <input type="text" class="form-control" v-model="debugFileName" placeholder="输入要测试的文件名，如：S01E02.mkv">
+                <button class="btn btn-primary" @click="runDebug" :disabled="!debugFileName || debugLoading">
+                  <span v-if="debugLoading" class="spinner-border spinner-border-sm"></span>
+                  <i v-else class="bi bi-play"></i> 测试
+                </button>
+              </div>
+              <div class="form-text">输入文件名测试当前配置的所有正则表达式</div>
+            </div>
+
+            <div v-if="debugResults.length > 0" class="debug-results">
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="mb-0">测试结果 (共 [[ debugResults.length ]] 条正则)</h6>
+                <span class="badge bg-success">
+                  匹配成功: [[ debugResults.filter(r => r.matched).length ]]
+                </span>
+              </div>
+              <div class="accordion" id="debugResultsAccordion">
+                <div v-for="(result, index) in debugResults" :key="index" class="accordion-item mb-2">
+                  <h2 class="accordion-header">
+                    <button class="accordion-button" :class="{ 'collapsed': !result.matched }" type="button"
+                      data-bs-toggle="collapse" :data-bs-target="'#debugResultCollapse' + index">
+                      <span class="badge me-2" :class="{
+                    'bg-success': result.matched,
+                    'bg-secondary': !result.matched && !result.error,
+                    'bg-danger': result.error
+                  }">
+                        [[ result.error || (result.matched ? '匹配成功' : '未匹配') ]]
+                      </span>
+                      <code class="text-truncate">[[ result.pattern ]]</code>
+                    </button>
+                  </h2>
+                  <div :id="'debugResultCollapse' + index" class="accordion-collapse collapse"
+                    :class="{ 'show': result.matched }" data-bs-parent="#debugResultsAccordion">
+                    <div class="accordion-body">
+                      <div v-if="result.error" class="alert alert-danger py-2">
+                        <i class="bi bi-exclamation-triangle me-2"></i> [[ result.error ]]
+                      </div>
+
+                      <div v-if="result.matched" class="debug-match-details">
+                        <div class="mb-3">
+                          <span class="fw-medium me-2">完整匹配:</span>
+                          <code class="bg-light p-2 rounded">[[ result.fullMatch ]]</code>
+                        </div>
+                        <div v-if="result.groups.length > 0">
+                          <div class="fw-medium mb-2">捕获组:</div>
+                          <div v-for="(group, gIndex) in result.groups" :key="gIndex"
+                            class="debug-group-item ps-3 mb-2">
+                            <span class="text-muted me-2" v-if="result.groups.length==2 &&gIndex==0">季度:</span>
+                            <span class="text-muted me-2" v-if="result.groups.length==2 &&gIndex==1">集数:</span>
+                            <span class="text-muted me-2" v-if="result.groups.length==1">集数:</span>
+                            <code class="bg-light p-1 rounded">[[ group ]]</code>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button class="btn btn-secondary" @click="closeRegexDebugModal">关闭</button>
           </div>
         </div>
       </div>
