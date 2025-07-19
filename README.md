@@ -52,7 +52,25 @@ EMBRESS会自动将宿主机anime目录添加到影视库的遍历列表中，�
 
 - 可配置访问密钥
 
-### 文件结构
+
+## 🧭 开发中 / 待实现功能
+
+以下功能已列入开发计划，将在后续版本中陆续推出：
+
+- 🧪 **正则调试器**
+  - 调试正则表达式匹配效果
+  - 支持测试文件名输入、即时预览结果
+
+- 📋 **整理剧集的目录清单导出**
+  - 支持导出某部剧集的文件结构清单
+  - 可导出为 Markdown / HTML 形式，便于备份或分享
+
+- 📝 **生成变更报告**
+  - 每日自动生成变更记录
+  - 包含重命名文件明细、失败文件列表、更新统计等
+  - 支持导出
+
+## 文件结构
 
 ```
 embress
@@ -68,12 +86,10 @@ embress
 │        ├── css
 │        │   └── styles.css
 │        └── js
-│            ├── main.js
-│            └── vue.js
-│     
-│     
+│            └── main.js
 ├── conf
-│   └── supervisord.conf            ➔ supervisord进程配置
+│   ├── supervisord.conf            ➔ supervisord进程配置
+│   └── regex_pattern.json          ➔ 默认正则配置
 ├── Dockerfile                      ➔ 打包配置
 └── docker-compose.yml              ➔ docker构建配置，宿主机要先创建对应目录
   
@@ -102,6 +118,7 @@ docker run -d \
   -e ACCESS_KEY=${ACCESS_KEY} \
   -e MEDIA_PATH=/app/media \
   -e CONFIG_DB_PATH=/app/conf/config.db
+  -e DEFAULT_REGEX_PATH=/app/conf/regex_pattern.json
   -e LOG_PATH=/app/python/logs
   -e SCAN_INTERVAL=3600 \
   meidlinger1024/embress:latest
@@ -120,6 +137,8 @@ SCAN_INTERVAL：扫描间隔，单位秒
 MEDIA_PATH:容器影视库根目录，默认是/app/media
 
 CONFIG_DB_PATH:数据库存储目录，默认/app/conf/config.db
+
+DEFAULT_REGEX_PATH:默认正则表达式配置，默认/app/conf/regex_pattern.json
 
 LOG_PATH:程序日志配置，默认/app/python/logs
 
@@ -143,6 +162,7 @@ services:
       - ACCESS_KEY=ACCESS_KEY
       - MEDIA_PATH=/app/media
       - CONFIG_DB_PATH=/app/conf/config.db
+      - DEFAULT_REGEX_PATH=/app/conf/regex_pattern.json
       - LOG_PATH=/app/python/logs
       - SCAN_INTERVAL=3600
 ```
