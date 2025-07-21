@@ -376,6 +376,25 @@ class ConfigDB:
                 pass
         return None
 
+    def get_last_effect_scan_result(self):
+        conn, cursor = self._get_connection()
+        cursor.execute(
+            "SELECT data FROM scan_history "
+            "WHERE deleted_nfo > 0 "
+            "OR renamed > 0 "
+            "OR renamed_subtitle > 0 "
+            "OR renamed_audio > 0 "
+            "OR renamed_picture > 0 "
+            "ORDER BY timestamp DESC LIMIT 1;"
+        )
+        row = cursor.fetchone()
+        if row:
+            try:
+                return json.loads(row[0])
+            except json.JSONDecodeError:
+                pass
+        return None
+
     def add_change_records(self, records: List[Dict]):
         """批量添加变更记录到数据库，避免重复"""
         conn, cursor = self._get_connection()

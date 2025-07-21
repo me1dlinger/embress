@@ -216,11 +216,11 @@
               </div>
 
               <div class="row mt-4">
-                <div class="col-12">
+                <div class="col-6">
                   <div class="dashboard-card">
                     <div class="card-header d-flex align-items-center">
                       <i class="bi bi-clock me-2"></i>
-                      <span>最新处理结果</span>
+                      <span>最新扫描结果</span>
                     </div>
                     <div class="card-body p-4">
                       <div v-if="!lastScanResult"
@@ -272,6 +272,71 @@
                             <p class="mb-0">
                               <strong>错误信息:</strong> [[
                               lastScanResult.message ]]
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-6">
+                  <div class="dashboard-card">
+                    <div class="card-header d-flex align-items-center">
+                      <i class="bi bi-clock me-2"></i>
+                      <span>最新有效扫描</span>
+                    </div>
+                    <div class="card-body p-4">
+                      <div v-if="!lastEffectScanResult"
+                        class="d-flex flex-column align-items-center justify-content-center py-5">
+                        <i class="bi bi-clock-history mb-3" style="font-size: 2.5rem; color: #ddd"></i>
+                        <p class="text-muted">暂无扫描结果</p>
+                      </div>
+                      <div v-else>
+                        <div class="alert"
+                          :class="lastEffectScanResult.status === 'error' ? 'alert-danger' : 'alert-success'">
+                          <h6>
+                            <i class="bi"
+                              :class="lastEffectScanResult.status === 'error' ? 'bi-x-circle' : 'bi-check-circle'"></i>
+                            [[ lastEffectScanResult.status === 'error' ? '扫描失败'
+                            : lastEffectScanResult.scan_type=='rollback'?'回滚完成':'扫描完成' ]]
+                          </h6>
+                          <p class="mb-2">
+                            <strong>时间:</strong> [[
+                            formatDate(lastEffectScanResult.timestamp) ]]
+                          </p>
+                          <div v-if="lastScanResult.status !== 'error'">
+                            <p class="mb-2">
+                              <strong>处理文件:</strong> [[
+                              lastEffectScanResult.processed ]]
+                            </p>
+                            <div v-if="lastEffectScanResult.deleted_nfo" class="d-flex align-items-center mb-2">
+                              <strong class="me-2">删除:</strong>
+                              <span>[[ lastEffectScanResult.deleted_nfo ]] 个nfo文件</span>
+                            </div>
+                            <div class="d-flex align-items-center mb-2">
+                              <strong class="me-2">重命名:</strong>
+                              <span>[[ lastEffectScanResult.renamed?lastEffectScanResult.renamed:0 ]] 个视频 | [[
+                                lastEffectScanResult.renamed_subtitle?lastEffectScanResult.renamed_subtitle:0 ]] 个字幕 |
+                                [[
+                                lastEffectScanResult.renamed_audio?lastEffectScanResult.renamed_audio:0 ]] 个音频 | [[
+                                lastEffectScanResult.renamed_picture?lastEffectScanResult.renamed_picture:0 ]]
+                                张图片</span>
+                              <span v-if="lastEffectScanResult.unrenamed_count > 0" class="ms-3">
+                                <span class="badge bg-warning text-dark me-2">
+                                  <i class="bi bi-exclamation-triangle me-1"></i>
+                                  [[ lastEffectScanResult.unrenamed_count ]] 个未重命名
+                                </span>
+                                <button class="btn btn-sm btn-outline-warning"
+                                  @click="showUnrenamedFiles(lastEffectScanResult.unrenamed_files)">
+                                  <i class="bi bi-eye me-1"></i>查看
+                                </button>
+                              </span>
+                            </div>
+                          </div>
+                          <div v-else>
+                            <p class="mb-0">
+                              <strong>错误信息:</strong> [[
+                              lastEffectScanResult.message ]]
                             </p>
                           </div>
                         </div>

@@ -124,13 +124,19 @@ def get_status():
     else:
         next_run_time = "未知"
     last_scan = config_db.get_last_scan_result()
+    last_effect_scan = config_db.get_last_effect_scan_result()
     if last_scan and "unrenamed_files" in last_scan:
         last_scan["unrenamed_files"] = enrich_path_fields(last_scan["unrenamed_files"])
+    if last_effect_scan and "unrenamed_files" in last_effect_scan:
+        last_effect_scan["unrenamed_files"] = enrich_path_fields(
+            last_effect_scan["unrenamed_files"]
+        )
     return jsonify(
         {
             "media_path": MEDIA_PATH,
             "scan_interval": SCAN_INTERVAL,
             "last_scan": last_scan,
+            "last_effect_scan": last_effect_scan,
             "scheduler_running": scheduler_state,
             "total_scans": config_db.get_scan_history_count(),
             "total_whitelist": len(config_db.get_whitelist()),

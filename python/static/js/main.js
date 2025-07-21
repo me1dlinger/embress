@@ -15,6 +15,7 @@ new Vue({
     systemStatus: null,
     statusLoading: false,
     lastScanResult: null,
+    lastEffectScanResult: null,
 
     showScanIntervalModal: false,
     scanInterval: 600,
@@ -402,6 +403,9 @@ new Vue({
         this.scanInterval = data.scan_interval;
         if (data.last_scan) {
           this.lastScanResult = data.last_scan;
+        }
+        if (data.last_effect_scan) {
+          this.lastEffectScanResult = data.last_effect_scan;
         }
       } catch (error) {
         if (error.status === 401) {
