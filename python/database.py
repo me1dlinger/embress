@@ -168,6 +168,7 @@ class ConfigDB:
         self._add_column_if_missing("scan_history", "scan_type TEXT")
         self._add_column_if_missing("scan_history", "renamed_audio INTEGER DEFAULT 0")
         self._add_column_if_missing("scan_history", "renamed_picture INTEGER DEFAULT 0")
+        self._init_change_record_table()
 
     def _init_change_record_table(self):
         conn, cursor = self._get_connection()
