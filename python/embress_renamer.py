@@ -418,7 +418,9 @@ class EmbressRenamer:
         try:
             records = config_db.get_season_change_records(str(season_dir.absolute()))
         except Exception as e:
-            self.logger.warning("从数据库获取变更记录失败: %s", e)
+            self.logger.warning(
+                "Failed to retrieve change records from the database: %s", e
+            )
             return []
 
         latest_map: Dict[str, Tuple[str, str]] = {}
@@ -1036,12 +1038,11 @@ class EmbressRenamer:
         )
         if self._pending_change_records:
             try:
-                self.logger.info(f"开始保存记录")
                 config_db.add_change_records(self._pending_change_records)
-                self.logger.info("保存成功")
+                self.logger.info("Change records saved")
 
             except Exception as e:
-                self.logger.error("批量保存变更记录失败: %s", e)
+                self.logger.error("Failed to batch save change records: %s", e)
             for season_dir in self._seasons_to_update:
                 self._write_all_change_records(season_dir.absolute())
             self._pending_change_records = []
