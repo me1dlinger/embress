@@ -277,15 +277,36 @@ def rename_file():
         return jsonify({"success": False, "message": f"文件重命名失败: {str(e)}"}), 500
 
 
-@app.route("/api/rollback-season", methods=["POST"])
+from flask import Flask, request, jsonify
+from pathlib import Path
+
+
+@app.route("/api/rollback", methods=["POST"])
 def rollback_season():
     data = request.get_json(silent=True) or {}
     sub_path = data.get("sub_path")
     if not sub_path:
-        return jsonify({"success": False, "message": "缺少 sub_path"}), 400
-    app.logger.info(f"Start rollback Season: {sub_path}")
-    rollback_result = renamer.scan_and_rollback(sub_path)
-    return jsonify(rollback_result.get("result", {})), rollback_result.get("code", 200)
+        return jsonify({"success": False, "message": "缺少 sub_path"}), 200
+
+    full_path = Path(MEDIA_PATH) / sub_path
+    if not full_path.exists():
+        return jsonify({"success": False, "message": f"路径不存在: {sub_path}"}), 200
+
+    if full_path.is_file():
+        app.logger.info(f"Detected file path, start rollback file: {sub_path}")
+        rollback_result = renamer.rollback_single_file(sub_path)
+    elif full_path.is_dir():
+        app.logger.info(f"Start rollback Season: {sub_path}")
+        rollback_result = renamer.scan_and_rollback(sub_path)
+    else:
+        return (
+            jsonify({"success": False, "message": f"路径类型不明确: {sub_path}"}),
+            200,
+        )
+
+    return jsonify(
+        {"success": True, "result": rollback_result.get("result", {})}
+    ), rollback_result.get("code", 200)
 
 
 @app.route("/api/regex-patterns", methods=["GET"])

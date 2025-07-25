@@ -928,10 +928,9 @@ new Vue({
         );
         return;
       }
-
       this.subScanLoading = true;
       try {
-        const data = await this.auth_fetch("/api/rollback-season", {
+        const data = await this.auth_fetch("/api/rollback", {
           method: "POST",
           body: JSON.stringify({ sub_path: this.subPath.trim() }),
         });
@@ -977,11 +976,6 @@ new Vue({
     },
     showUnrenamedFiles(files) {
       this.unrenamedFiles = files || [];
-      console.log(
-        "🚀 ~ showUnrenamedFiles ~ this.unrenamedFiles:",
-        this.unrenamedFiles
-      );
-
       this.showUnrenamedModal = true;
     },
 
