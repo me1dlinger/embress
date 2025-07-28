@@ -8,22 +8,25 @@
 import os
 import json
 import logging
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.header import Header
 from pathlib import Path
-from logging.handlers import TimedRotatingFileHandler
 from flask import Flask, render_template, request, jsonify
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.schedulers.base import STATE_RUNNING, STATE_PAUSED
 from embress_renamer import EmbressRenamer, WhitelistLoader
+from email_notifier import EmailNotifier
 from database import config_db
 from datetime import datetime, timedelta
 from logging_utils import DailyFileHandler
 
-LOGS_PATH = Path(os.getenv("LOG_PATH", "./data/logs"))
-MEDIA_PATH = os.getenv("MEDIA_PATH", "./data/media")
+LOGS_PATH = Path(os.getenv("LOG_PATH", "../data/logs"))
+MEDIA_PATH = os.getenv("MEDIA_PATH", "../data/media")
 ACCESS_KEY = os.getenv("ACCESS_KEY", "12345")
 SCAN_INTERVAL = int(os.getenv("SCAN_INTERVAL", 600))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
-
 
 MAX_RETRIES = 3
 RETRY_DELAY = 0.5
@@ -32,6 +35,7 @@ app = Flask(__name__)
 app.logger.propagate = False
 renamer = EmbressRenamer(MEDIA_PATH)
 scheduler = BackgroundScheduler()
+email_notifier = EmailNotifier()
 
 WHITELIST_ENDPOINTS = {
     "static",
@@ -71,6 +75,7 @@ def scheduled_scan() -> None:
         result = renamer.scan_and_rename()
         config_db.add_scan_history(result)
         app.logger.info(f"Scheduled scanning completed: {result}")
+        email_notifier.send_notification(result)
     except Exception as exc:
         app.logger.exception("Scheduled scanning failed")
         error_result = {
@@ -79,6 +84,7 @@ def scheduled_scan() -> None:
             "timestamp": datetime.now().isoformat(),
         }
         config_db.add_scan_history(error_result)
+        email_notifier.send_notification(error_result)
 
 
 def enrich_path_fields(entries: list[dict]) -> list[dict]:
@@ -521,6 +527,46 @@ def get_log_content(filename: str):
     except Exception as exc:
         app.logger.exception("Failed to read log")
         return jsonify({"error": f"读取日志失败: {exc}"}), 500
+
+
+def send_email_notification(subject, content, is_html=False):
+    """发送邮件通知"""
+    if (
+        not EMAIL_ENABLED
+        or not EMAIL_HOST
+        or not EMAIL_USER
+        or not EMAIL_PASSWORD
+        or not EMAIL_RECIPIENTS
+    ):
+        app.logger.info("Email notification not configured or not enabled")
+        return
+
+    try:
+        # 创建邮件对象
+        message = MIMEMultipart()
+        message["From"] = Header(EMAIL_SENDER, "utf-8")
+        message["Subject"] = Header(subject, "utf-8")
+
+        # 添加邮件正文
+        if is_html:
+            message.attach(MIMEText(content, "html", "utf-8"))
+        else:
+            message.attach(MIMEText(content, "plain", "utf-8"))
+
+        # 连接SMTP服务器并发送邮件
+        server = smtplib.SMTP(EMAIL_HOST, EMAIL_PORT)
+        server.starttls()
+        server.login(EMAIL_USER, EMAIL_PASSWORD)
+
+        for recipient in EMAIL_RECIPIENTS:
+            if recipient.strip():
+                message["To"] = Header(recipient.strip(), "utf-8")
+                server.sendmail(EMAIL_SENDER, recipient.strip(), message.as_string())
+
+        server.quit()
+        app.logger.info("Email notification sent successfully")
+    except Exception as e:
+        app.logger.error(f"Failed to send email notification: {e}")
 
 
 def setup_logging() -> None:
