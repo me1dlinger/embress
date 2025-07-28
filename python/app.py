@@ -550,46 +550,6 @@ def get_log_content(filename: str):
         return jsonify({"error": f"读取日志失败: {exc}"}), 500
 
 
-def send_email_notification(subject, content, is_html=False):
-    """发送邮件通知"""
-    if (
-        not EMAIL_ENABLED
-        or not EMAIL_HOST
-        or not EMAIL_USER
-        or not EMAIL_PASSWORD
-        or not EMAIL_RECIPIENTS
-    ):
-        app.logger.info("Email notification not configured or not enabled")
-        return
-
-    try:
-        # 创建邮件对象
-        message = MIMEMultipart()
-        message["From"] = Header(EMAIL_SENDER, "utf-8")
-        message["Subject"] = Header(subject, "utf-8")
-
-        # 添加邮件正文
-        if is_html:
-            message.attach(MIMEText(content, "html", "utf-8"))
-        else:
-            message.attach(MIMEText(content, "plain", "utf-8"))
-
-        # 连接SMTP服务器并发送邮件
-        server = smtplib.SMTP(EMAIL_HOST, EMAIL_PORT)
-        server.starttls()
-        server.login(EMAIL_USER, EMAIL_PASSWORD)
-
-        for recipient in EMAIL_RECIPIENTS:
-            if recipient.strip():
-                message["To"] = Header(recipient.strip(), "utf-8")
-                server.sendmail(EMAIL_SENDER, recipient.strip(), message.as_string())
-
-        server.quit()
-        app.logger.info("Email notification sent successfully")
-    except Exception as e:
-        app.logger.error(f"Failed to send email notification: {e}")
-
-
 def setup_logging() -> None:
     LOGS_PATH.mkdir(parents=True, exist_ok=True)
 
