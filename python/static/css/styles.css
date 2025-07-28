@@ -1088,6 +1088,7 @@
 
  /* 表单文本提示 */
  .form-text {
+   margin-left: 5px;
    font-size: 0.85rem;
    color: #6c757d;
  }

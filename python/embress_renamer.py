@@ -418,7 +418,9 @@ class EmbressRenamer:
         try:
             records = config_db.get_season_change_records(str(season_dir.absolute()))
         except Exception as e:
-            self.logger.warning("从数据库获取变更记录失败: %s", e)
+            self.logger.warning(
+                "Failed to retrieve change records from the database: %s", e
+            )
             return []
 
         latest_map: Dict[str, Tuple[str, str]] = {}
@@ -757,15 +759,176 @@ class EmbressRenamer:
                 )
             except Exception as exc:
                 self.logger.exception("Writing rollback.json failed")
-
-        result = {
-            "success": True,
-            "rolled_back_file": rolled_back_file_cnt,
-            "rolled_back_sub": rolled_back_sub_cnt,
-            "results": rollback_results,
-        }
         code = 200
-        return {"result": result, "code": code}
+        return {"result": rollback_result, "code": code}
+
+    def rollback_single_file(self, file_path: str):
+        """回滚单个文件"""
+        self.logger.info(f"Start rollback file: {file_path}")
+
+        abs_file_path = Path(file_path)
+        if not abs_file_path.is_absolute():
+            abs_file_path = Path(MEDIA_PATH) / file_path
+
+        if not abs_file_path.exists():
+            result = {"success": False, "message": "文件不存在"}
+            return {"result": result, "code": 404}
+
+        season_dir = abs_file_path.parent
+        media_type = self._extract_media_type(season_dir)
+
+        try:
+            # 获取该文件的变更记录
+            original_records = config_db.get_season_change_records(
+                str(season_dir.absolute())
+            )
+
+            # 筛选出目标文件的重命名记录
+            target_record = None
+            for rec in original_records:
+                if (
+                    rec.get("type") == "rename"
+                    and rec.get("status") == "success"
+                    and rec.get("rollback") is not True
+                    and rec.get("path") == str(abs_file_path.absolute())
+                ):
+                    target_record = rec
+                    break
+
+            if not target_record:
+                result = {
+                    "success": False,
+                    "message": "未找到该文件的重命名记录或已被回滚",
+                }
+                return {"result": result, "code": 404}
+
+            # 执行回滚
+            original_name = target_record["original"]
+            changes = self._rollback_file_and_subtitles(
+                abs_file_path, original_name, original_records
+            )
+
+            rollback_results = []
+            rolled_back_file_cnt = 0
+            rolled_back_sub_cnt = 0
+            rolled_back_audio_cnt = 0
+            rolled_back_picture_cnt = 0
+
+            if self._count_success_renames(changes):
+                rolled_back_file_cnt = 1
+                rollback_result = {
+                    "type": "rollback",
+                    "original": target_record["new"],
+                    "new": original_name,
+                    "status": "rolled_back",
+                    "timestamp": datetime.now().isoformat(),
+                    "path": str((abs_file_path.parent / original_name).absolute()),
+                }
+                rollback_results.append(rollback_result)
+
+                # 更新数据库记录
+                target_record["rollback"] = True
+                config_db.update_change_record_rollback(
+                    target_record["path"], target_record["original"], True
+                )
+
+                # 处理关联文件的回滚记录
+                for change in changes:
+                    if (
+                        change.get("status") == "success"
+                        and change.get("type") != "rename"
+                    ):
+                        rollback_type = "subtitle_rollback"
+                        if change.get("type") == "subtitle_rename":
+                            rollback_type = "subtitle_rollback"
+                            rolled_back_sub_cnt += 1
+                        elif change.get("type") == "audio_rename":
+                            rollback_type = "audio_rollback"
+                            rolled_back_audio_cnt += 1
+                        elif change.get("type") == "picture_rename":
+                            rollback_type = "picture_rollback"
+                            rolled_back_picture_cnt += 1
+
+                        rollback_result = {
+                            "type": rollback_type,
+                            "original": change["original"],
+                            "new": change["new"],
+                            "status": "rolled_back",
+                            "timestamp": datetime.now().isoformat(),
+                            "path": str(
+                                (abs_file_path.parent / change["new"]).absolute()
+                            ),
+                        }
+                        rollback_results.append(rollback_result)
+
+                        # 更新关联文件的数据库记录
+                        subtitle_path = str(
+                            (abs_file_path.parent / change["original"]).absolute()
+                        )
+                        config_db.update_change_record_rollback(
+                            subtitle_path, change["new"], True
+                        )
+
+                # 删除旧的NFO文件
+                nfo_changes = self._delete_old_nfo(
+                    season_dir, Path(target_record["new"]).stem, []
+                )
+                if nfo_changes:
+                    nfo_delete_records = self._get_new_change_record(
+                        season_dir, media_type, nfo_changes
+                    )
+                    config_db.add_change_records(nfo_delete_records)
+
+                # 更新rename_record.json
+                self._write_all_change_records(season_dir.absolute())
+
+                # 记录回滚历史
+                rollback_history = {
+                    "status": "completed",
+                    "processed": rolled_back_file_cnt
+                    + rolled_back_sub_cnt
+                    + rolled_back_audio_cnt
+                    + rolled_back_picture_cnt,
+                    "renamed": rolled_back_file_cnt,
+                    "renamed_subtitle": rolled_back_sub_cnt,
+                    "renamed_audio": rolled_back_audio_cnt,
+                    "renamed_picture": rolled_back_picture_cnt,
+                    "deleted_nfo": len(nfo_changes) if nfo_changes else 0,
+                    "timestamp": datetime.now().isoformat(),
+                    "target": file_path,
+                    "scan_type": "rollback",
+                }
+                config_db.add_scan_history(rollback_history)
+                rollback_record_path = season_dir / "rollback.json"
+                if rollback_record_path.exists():
+                    try:
+                        existing = json.loads(
+                            rollback_record_path.read_text(encoding="utf-8")
+                        )
+                    except Exception:
+                        existing = []
+                else:
+                    existing = []
+
+                all_records = existing + rollback_results
+                rollback_record_path.write_text(
+                    json.dumps(all_records, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+
+                return {"result": rollback_history, "code": 200}
+            else:
+                result = {
+                    "success": False,
+                    "message": "文件回滚失败",
+                    "errors": [c.get("error") for c in changes if c.get("error")],
+                }
+                return {"result": result, "code": 500}
+
+        except Exception as e:
+            self.logger.exception("Single file rollback failed")
+            result = {"success": False, "message": f"回滚过程中发生错误: {str(e)}"}
+            return {"result": result, "code": 500}
 
     def scan_and_rename(self, sub_path: Optional[str] = None) -> Dict:
         self.current_sub_path = sub_path
@@ -875,12 +1038,11 @@ class EmbressRenamer:
         )
         if self._pending_change_records:
             try:
-                self.logger.info(f"开始保存记录")
                 config_db.add_change_records(self._pending_change_records)
-                self.logger.info("保存成功")
+                self.logger.info("Change records saved")
 
             except Exception as e:
-                self.logger.error("批量保存变更记录失败: %s", e)
+                self.logger.error("Failed to batch save change records: %s", e)
             for season_dir in self._seasons_to_update:
                 self._write_all_change_records(season_dir.absolute())
             self._pending_change_records = []
