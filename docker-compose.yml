@@ -19,3 +19,9 @@ services:
       - DEFAULT_REGEX_PATH=/app/conf/regex_pattern.json
       - LOG_PATH=/app/python/logs
       - SCAN_INTERVAL=3600
+      - EMAIL_ENABLED=false
+      - EMAIL_HOST=mail.163.com
+      - EMAIL_PORT=465
+      - EMAIL_USER=from@mail.com
+      - EMAIL_PASSWORD=password
+      - EMAIL_RECIPIENTS=to@mail.com
