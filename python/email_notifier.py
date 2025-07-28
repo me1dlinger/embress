@@ -49,8 +49,24 @@ class EmailNotifier:
 
     def _send_success_notification(self, result):
         """发送成功通知"""
-        subject = "EMBRESS - 自动扫描完成通知"
 
+        renamed = result.get("renamed", 0)
+        renamed_subtitle = result.get("renamed_subtitle", 0)
+        renamed_audio = result.get("renamed_audio", 0)
+        renamed_picture = result.get("renamed_picture", 0)
+        deleted_nfo = result.get("deleted_nfo", 0)
+        unrenamed_count = result.get("unrenamed_count", 0)
+        if (
+            renamed
+            + renamed_subtitle
+            + renamed_audio
+            + renamed_picture
+            + deleted_nfo
+            + unrenamed_count
+            == 0
+        ):
+            return
+        subject = "EMBRESS - 自动扫描完成通知"
         # 构建未重命名文件详情
         unrenamed_details = ""
         if result.get("unrenamed_count", 0) > 0:
@@ -147,30 +163,29 @@ class EmailNotifier:
         self._send_email(subject, html_content, is_html=True)
 
     def _send_email(self, subject, content, is_html=False):
-        """发送邮件核心方法"""
         try:
             # 创建邮件对象
             message = MIMEMultipart()
-            message["From"] = Header(self.EMAIL_SENDER, "utf-8")
-            message["Subject"] = Header(subject, "utf-8")
+            message["From"] = self.EMAIL_SENDER.strip('"')
+            message["Subject"] = Header(subject.strip(), "utf-8")
 
             # 添加邮件正文
             if is_html:
                 message.attach(MIMEText(content, "html", "utf-8"))
             else:
                 message.attach(MIMEText(content, "plain", "utf-8"))
-
-            # 连接SMTP服务器并发送邮件
             server = smtplib.SMTP(self.EMAIL_HOST, self.EMAIL_PORT)
             server.starttls()
             server.login(self.EMAIL_USER, self.EMAIL_PASSWORD)
-
             for recipient in self.EMAIL_RECIPIENTS:
                 if recipient.strip():
-                    message["To"] = Header(recipient.strip(), "utf-8")
-                    server.sendmail(
-                        self.EMAIL_SENDER, recipient.strip(), message.as_string()
+                    to_addr = recipient.strip()
+                    (
+                        message.replace_header("To", to_addr)
+                        if "To" in message
+                        else message.add_header("To", to_addr)
                     )
+                    server.sendmail(self.EMAIL_SENDER, to_addr, message.as_string())
 
             server.quit()
             self.logger.info("Email notification sent successfully")
