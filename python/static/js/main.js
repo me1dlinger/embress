@@ -96,7 +96,8 @@ new Vue({
     confirmCallback: null,
     toasts: [],
     toastId: 0,
-
+    showSearchQuery: "",
+    filteredShowsChangeList: [],
     showFilteredOnly: false,
   },
 
@@ -654,12 +655,12 @@ new Vue({
 
       try {
         if (this.selectedShow.show_name) {
-          // 加载特定节目的记录
           await this.loadShowRecords();
         } else {
           // 加载节目列表
           const data = await this.auth_fetch("/api/change-records");
           this.showsChangeList = data.shows || [];
+          this.filteredShowsChangeList = [...this.showsChangeList];
           this.showsChangeList.forEach((show) => {
             if (show.types) {
               show.types = show.types.sort((a, b) => {
@@ -691,11 +692,11 @@ new Vue({
         }
         this.showsChangeList = [];
         this.selectedShowRecords = [];
+        this.filteredShowsChangeList = []; // 重置筛选列表
       } finally {
         this.recordsLoading = false;
       }
     },
-
     async selectShow(mediaType, showName) {
       this.selectedShow = {
         media_type: mediaType,
@@ -703,6 +704,7 @@ new Vue({
       };
       await this.loadShowRecords();
     },
+
     async loadShowRecords() {
       this.recordsLoading = true;
 
@@ -729,7 +731,6 @@ new Vue({
     setTypeFilter(type) {
       this.selectedTypeFilter = type;
     },
-    // 返回节目列表
     goBackToShows() {
       this.selectedShow = {
         media_type: null,
@@ -738,6 +739,8 @@ new Vue({
       this.selectedShowRecords = [];
       this.selectedTypeFilter = "all";
       this.groupBy = "type";
+      this.showSearchQuery = ""; // 清除搜索
+      this.filteredShowsChangeList = [...this.showsChangeList]; // 重置筛选列表
       this.loadChangeRecords();
     },
     getTypeIcon(type) {
@@ -1533,6 +1536,7 @@ new Vue({
         this.regexSaving = false;
       }
     },
+
     triggerImportFile() {
       this.$refs.importFileInput.click();
     },
@@ -1649,6 +1653,24 @@ new Vue({
         isValidArray(data.episode_only) && isValidArray(data.season_episode)
       );
     },
+    filterShows() {
+      if (!this.showSearchQuery) {
+        this.filteredShowsChangeList = this.showsChangeList;
+        return;
+      }
+
+      const query = this.showSearchQuery.toLowerCase();
+      this.filteredShowsChangeList = this.showsChangeList.filter(
+        (show) =>
+          show.show_name.toLowerCase().includes(query) ||
+          show.media_type.toLowerCase().includes(query)
+      );
+    },
+    clearSearch() {
+      this.showSearchQuery = "";
+      this.filteredShowsChangeList = this.showsChangeList;
+    },
+
     showModalComponent(
       type,
       title,

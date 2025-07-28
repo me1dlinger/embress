@@ -1910,3 +1910,28 @@
  .history-card:nth-child(even) {
    animation-delay: 0.1s;
  }
+ .show-search-container {
+  margin-bottom: 1rem;
+}
+
+.show-search-container .input-group-text {
+  background-color: #f8f9fa;
+  border-color: #e9ecef;
+}
+
+.show-search-container .form-control {
+  border-left: none;
+}
+
+.show-search-container .form-control:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 0.2rem rgba(58, 134, 255, 0.25);
+}
+
+.show-search-container .btn-outline-secondary {
+  border-color: #e9ecef;
+}
+
+.show-search-container .btn-outline-secondary:hover {
+  background-color: #e9ecef;
+}

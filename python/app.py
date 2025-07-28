@@ -22,8 +22,8 @@ from database import config_db
 from datetime import datetime, timedelta
 from logging_utils import DailyFileHandler
 
-LOGS_PATH = Path(os.getenv("LOG_PATH", "../data/logs"))
-MEDIA_PATH = os.getenv("MEDIA_PATH", "../data/media")
+LOGS_PATH = Path(os.getenv("LOG_PATH", "./data/logs"))
+MEDIA_PATH = os.getenv("MEDIA_PATH", "./data/media")
 ACCESS_KEY = os.getenv("ACCESS_KEY", "12345")
 SCAN_INTERVAL = int(os.getenv("SCAN_INTERVAL", 600))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
