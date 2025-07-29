@@ -170,9 +170,6 @@ services:
  <img src="./docs/screenshots/1.png"/>
 </div>
 <div align="center">
- <img src="./docs/screenshots/1.5.png"/>
-</div>
-<div align="center">
  <img src="./docs/screenshots/1.6.png"/>
 </div>
 <div align="center">
@@ -180,6 +177,9 @@ services:
 </div>
 <div align="center">
  <img src="./docs/screenshots/1.8.png"/>
+</div>
+<div align="center">
+ <img src="./docs/screenshots/1.9.png"/>
 </div>
 <div align="center">
  <img src="./docs/screenshots/2.png"/>
