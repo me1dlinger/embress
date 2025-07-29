@@ -49,7 +49,6 @@ class EmailNotifier:
 
     def _send_success_notification(self, result):
         """发送成功通知"""
-
         renamed = result.get("renamed", 0)
         renamed_subtitle = result.get("renamed_subtitle", 0)
         renamed_audio = result.get("renamed_audio", 0)
@@ -110,12 +109,12 @@ class EmailNotifier:
                 
                 <div class="stats">
                     <h2>变更统计</h2>
-                    <div class="stat-item"><span class="changes">重命名视频文件:</span> {result.get("renamed", 0)}</div>
-                    <div class="stat-item"><span class="changes">重命名字幕文件:</span> {result.get("renamed_subtitle", 0)}</div>
-                    <div class="stat-item"><span class="changes">重命名音频文件:</span> {result.get("renamed_audio", 0)}</div>
-                    <div class="stat-item"><span class="changes">重命名图片文件:</span> {result.get("renamed_picture", 0)}</div>
-                    <div class="stat-item"><span class="changes">删除NFO文件:</span> {result.get("deleted_nfo", 0)}</div>
-                    <div class="stat-item"><span class="unrenamed">未重命名文件数量:</span> {result.get("unrenamed_count", 0)}</div>
+                    <div class="stat-item"><span class="changes">重命名视频文件:</span> {renamed}</div>
+                    <div class="stat-item"><span class="changes">重命名字幕文件:</span> {renamed_subtitle}</div>
+                    <div class="stat-item"><span class="changes">重命名音频文件:</span> {renamed_audio}</div>
+                    <div class="stat-item"><span class="changes">重命名图片文件:</span> {renamed_picture}</div>
+                    <div class="stat-item"><span class="changes">删除NFO文件:</span> {deleted_nfo}</div>
+                    <div class="stat-item"><span class="unrenamed">未重命名文件数量:</span> {unrenamed_count}</div>
                 </div>
                 
                 {unrenamed_details}
