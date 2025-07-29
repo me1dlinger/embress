@@ -715,18 +715,20 @@ class EmbressRenamer:
                         "path": rec["path"],
                     }
                 )
-        try:
-            nfo_delete_records = self._get_new_change_record(
-                season_dir, media_type, nfo_changes
-            )
-            try:
-                config_db.add_change_records(nfo_delete_records)
-            except Exception as e:
-                self.logger.error(f"Failed to save and delete records to database: {e}")
-            self._write_all_change_records(season_dir.absolute())
-        except Exception as exc:
-            self.logger.exception("Failed to update the rename_record.json")
         if rollback_results:
+            try:
+                nfo_delete_records = self._get_new_change_record(
+                    season_dir, media_type, nfo_changes
+                )
+                try:
+                    config_db.add_change_records(nfo_delete_records)
+                except Exception as e:
+                    self.logger.error(
+                        f"Failed to save and delete records to database: {e}"
+                    )
+                self._write_all_change_records(season_dir.absolute())
+            except Exception as exc:
+                self.logger.exception("Failed to update the rename_record.json")
             existing = []
             if rollback_record_path.exists():
                 try:
@@ -759,7 +761,22 @@ class EmbressRenamer:
                 )
             except Exception as exc:
                 self.logger.exception("Writing rollback.json failed")
+        else:
+            rollback_result = {
+                "status": "completed",
+                "processed": 0,
+                "renamed": 0,
+                "renamed_subtitle": 0,
+                "renamed_audio": 0,
+                "renamed_picture": 0,
+                "deleted_nfo": 0,
+                "timestamp": datetime.now().isoformat(),
+                "target": sub_path,
+                "scan_type": "rollback",
+            }
+            config_db.add_scan_history(rollback_result)
         code = 200
+        print(rollback_result)
         return {"result": rollback_result, "code": code}
 
     def rollback_single_file(self, file_path: str):
