@@ -102,10 +102,16 @@ docker run -d \
   -e TZ=Asia/Shanghai \
   -e ACCESS_KEY=${ACCESS_KEY} \
   -e MEDIA_PATH=/app/media \
-  -e CONFIG_DB_PATH=/app/conf/config.db
-  -e DEFAULT_REGEX_PATH=/app/conf/regex_pattern.json
-  -e LOG_PATH=/app/python/logs
+  -e CONFIG_DB_PATH=/app/conf/config.db \
+  -e DEFAULT_REGEX_PATH=/app/conf/regex_pattern.json \
+  -e LOG_PATH=/app/python/logs \
   -e SCAN_INTERVAL=3600 \
+  -e EMAIL_ENABLED=false \
+  -e EMAIL_HOST=mail.163.com \
+  -e EMAIL_PORT=465 \
+  -e EMAIL_USER=from@mail.com \
+  -e EMAIL_PASSWORD=password \
+  -e EMAIL_RECIPIENTS=to@mail.com \
   meidlinger1024/embress:latest
 ```
 
@@ -126,6 +132,8 @@ CONFIG_DB_PATH:数据库存储目录，默认/app/conf/config.db
 DEFAULT_REGEX_PATH:默认正则表达式配置，默认/app/conf/regex_pattern.json
 
 LOG_PATH:程序日志配置，默认/app/python/logs
+
+EMAIL_ENABLED:邮箱通知启用配置，默认false
 
 ### docker-compose配置
 ```
@@ -150,6 +158,12 @@ services:
       - DEFAULT_REGEX_PATH=/app/conf/regex_pattern.json
       - LOG_PATH=/app/python/logs
       - SCAN_INTERVAL=3600
+      - EMAIL_ENABLED=false
+      - EMAIL_HOST=mail.163.com
+      - EMAIL_PORT=465
+      - EMAIL_USER=from@mail.com
+      - EMAIL_PASSWORD=password
+      - EMAIL_RECIPIENTS=to@mail.com
 ```
 
 ## 🧩 界面截图

@@ -104,8 +104,14 @@ docker run -d \
   -e ACCESS_KEY=${ACCESS_KEY} \
   -e MEDIA_PATH=/app/media \
   -e CONFIG_DB_PATH=/app/conf/config.db
-  -e LOG_PATH=/app/python/logs
+  -e LOG_PATH=/app/python/logs \
   -e SCAN_INTERVAL=3600 \
+  -e EMAIL_ENABLED=false \
+  -e EMAIL_HOST=mail.163.com \
+  -e EMAIL_PORT=465 \
+  -e EMAIL_USER=from@mail.com \
+  -e EMAIL_PASSWORD=password \
+  -e EMAIL_RECIPIENTS=to@mail.com \
   meidlinger1024/embress:latest
 ```
 
@@ -121,9 +127,11 @@ SCAN_INTERVAL: Scan interval in seconds
 
 MEDIA_PATH: Container media library root directory (default: /app/media)
 
-CONFIG_DB_PATH:database directory, (default: /app/conf/config.db)
+CONFIG_DB_PATH: Database directory, (default: /app/conf/config.db)
 
-LOG_PATH:app-log directory, (default: /app/python/logs)
+LOG_PATH: app-log directory, (default: /app/python/logs)
+
+EMAIL_ENABLED: Email notification, (default: false)
 
 ### Run with Docker Compose
 ```
@@ -145,8 +153,15 @@ services:
       - ACCESS_KEY=ACCESS_KEY
       - MEDIA_PATH=/app/media
       - CONFIG_DB_PATH=/app/conf/config.db
+      - DEFAULT_REGEX_PATH=/app/conf/regex_pattern.json
       - LOG_PATH=/app/python/logs
       - SCAN_INTERVAL=3600
+      - EMAIL_ENABLED=false
+      - EMAIL_HOST=mail.163.com
+      - EMAIL_PORT=465
+      - EMAIL_USER=from@mail.com
+      - EMAIL_PASSWORD=password
+      - EMAIL_RECIPIENTS=to@mail.com
 ```
 
 ## 🧩 Screenshots
