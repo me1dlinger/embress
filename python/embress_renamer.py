@@ -5,16 +5,17 @@
  */
 """
 
-import os
-import re
 import json
 import logging
+import os
+import re
+import time
+import sys
+
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional, Set, Union
+from typing import Dict, List, Optional, Set, Tuple, Union
 from database import config_db
-import time
-
 from logging_utils import get_logger
 
 LOGS_PATH = Path(os.getenv("LOG_PATH", "./data/logs"))
@@ -158,10 +159,9 @@ class EmbressRenamer:
             else f"{episode:02d}"
         )
         new_seg = f"S{season_fmt:02d}E{ep_fmt}"
-
         # 检查是否已经是期望的格式
         if re.search(rf"\[{re.escape(new_seg)}\]", original, re.I) or re.search(
-            rf"\bS{season_fmt:02d}E{re.escape(ep_fmt)}\b", original, re.I
+            rf"\b{re.escape(f'S{season_fmt:02d}E{ep_fmt}')}(?=\W|$)", original, re.I
         ):
             return original
         if match_span:
@@ -1234,7 +1234,11 @@ class EmbressRenamer:
             return file_info, [], False
 
         season_num, ep_num, match_span = episode_info
-        effective_season = season_num or season_num_hint
+        if season_num is not None:
+            file_info.update({"status": STATUS_SKIP, "reason": "no_rename_needed"})
+            changes = self._build_skip_record(file_path.name)
+            return file_info, changes, False
+        effective_season = season_num_hint
         new_name = self._generate_new_filename(
             file_path.name, effective_season, ep_num, match_span
         )
@@ -1263,7 +1267,6 @@ class EmbressRenamer:
 
 
 if __name__ == "__main__":
-    import sys
 
     root = sys.argv[1] if len(sys.argv) > 1 else MEDIA_PATH
     print(

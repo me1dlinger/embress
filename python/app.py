@@ -5,22 +5,19 @@
  */
 """
 
-import os
-import json
 import logging
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from email.header import Header
-from pathlib import Path
-from flask import Flask, render_template, request, jsonify
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.schedulers.base import STATE_RUNNING, STATE_PAUSED
-from embress_renamer import EmbressRenamer, WhitelistLoader
-from email_notifier import EmailNotifier
-from database import config_db
+import os
 from datetime import datetime, timedelta
+from pathlib import Path
+from apscheduler.schedulers.background import BackgroundScheduler  # type: ignore
+from apscheduler.schedulers.base import STATE_PAUSED, STATE_RUNNING  # type: ignore
+from database import config_db
+from email_notifier import EmailNotifier
+from embress_renamer import EmbressRenamer, WhitelistLoader
+from flask import Flask, jsonify, render_template, request  # type: ignore
 from logging_utils import DailyFileHandler
+from apscheduler.schedulers.base import STATE_PAUSED, STATE_RUNNING, STATE_STOPPED
+
 
 LOGS_PATH = Path(os.getenv("LOG_PATH", "./data/logs"))
 MEDIA_PATH = os.getenv("MEDIA_PATH", "./data/media")
@@ -111,8 +108,6 @@ def authenticate():
         return jsonify({"success": True, "message": "验证成功"})
     return jsonify({"success": False, "message": "访问密钥错误"})
 
-
-from apscheduler.schedulers.base import STATE_RUNNING, STATE_PAUSED, STATE_STOPPED
 
 
 @app.route("/api/status")
@@ -250,7 +245,6 @@ def rename_file():
         )
 
     try:
-        from pathlib import Path
 
         original_file = Path(file_path) / file_name
         new_file = Path(file_path) / new_file_name
@@ -281,11 +275,6 @@ def rename_file():
     except Exception as e:
         app.logger.exception("文件重命名失败")
         return jsonify({"success": False, "message": f"文件重命名失败: {str(e)}"}), 500
-
-
-from flask import Flask, request, jsonify
-from pathlib import Path
-
 
 @app.route("/api/rollback", methods=["POST"])
 def rollback_season():

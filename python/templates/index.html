@@ -687,11 +687,13 @@
                                         <div v-else>
                                           <div class="mb-1">
                                             <strong>原文件:</strong>
-                                            <code class="filename">[[ record.original ]]</code>
+                                            <code class="filename" v-if="record.rollback">[[ record.new ]]</code>
+                                            <code class="filename" v-else>[[ record.original ]]</code>
                                           </div>
                                           <div class="mb-1">
                                             <strong>新文件:</strong>
-                                            <code class="filename">[[ record.new ]]</code>
+                                            <code class="filename" v-if="record.rollback">[[ record.original ]]</code>
+                                            <code class="filename" v-else>[[ record.new ]]</code>
                                           </div>
                                           <div class="mb-1">
                                             <strong>路径:</strong>
@@ -738,11 +740,13 @@
                                     <div v-else>
                                       <div class="mb-1">
                                         <strong>原文件:</strong>
-                                        <code class="filename">[[ record.original ]]</code>
+                                        <code class="filename" v-if="record.rollback">[[ record.new ]]</code>
+                                        <code class="filename" v-else>[[ record.original ]]</code>
                                       </div>
                                       <div class="mb-1">
                                         <strong>新文件:</strong>
-                                        <code class="filename">[[ record.new ]]</code>
+                                        <code class="filename" v-if="record.rollback">[[ record.original ]]</code>
+                                        <code class="filename" v-else>[[ record.new ]]</code>
                                       </div>
                                     </div>
                                   </div>
