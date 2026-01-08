@@ -996,7 +996,6 @@
 
                     <!-- 重命名编辑状态 -->
                     <div v-else class="file-info">
-                      测试测试
                       <div class="file-name">
                         <i class="bi bi-file-earmark me-2"></i>
                         <strong>[[ file.file_name ]]</strong>
@@ -1110,24 +1109,59 @@
               </p>
 
               <div class="whitelist-files-list">
+                <!-- 修改新增项显示部分 -->
                 <div v-for="(item, index) in newWhitelistItems" :key="'new-' + index"
                   class="whitelist-file-item new-item">
                   <div class="file-info">
                     <div class="file-name">
-                      <i class="bi" :class="item.type === 'directory' ? 'bi-folder-fill' : 'bi-file-earmark'" me-2></i>
-                      <strong>[[ item.file_name]]</strong>
+                      <i class="bi" :class="item.type === 'directory' ? 'bi-folder-fill' : 'bi-file-earmark'"></i>
+                      <strong>[[ item.file_name ]]</strong>
                       <span class="badge bg-success ms-2">新增</span>
-                      <span class="badge" :class="item.type === 'directory' ? 'bg-warning' : 'bg-info'" ms-1>
+                      <span class="badge" :class="item.type === 'directory' ? 'bg-warning' : 'bg-info'">
                         [[ item.type === 'directory' ? '目录' : '文件' ]]
                       </span>
                     </div>
-                    <div class="file-path text-muted">
+                    <div v-if="item.file_directory" class="file-path text-muted">
                       <i class="bi bi-folder me-1"></i>
                       [[ item.file_directory ]]
+                    </div>
+                    <div v-else class="file-path text-muted">
+                      <i class="bi bi-folder me-1"></i>
+                      根目录
                     </div>
                   </div>
                   <button class="btn btn-sm btn-outline-danger" @click="removeNewWhitelistItem(index)">
                     <i class="bi bi-trash me-1"></i>移除
+                  </button>
+                </div>
+
+                <!-- 修改现有白名单项显示部分 -->
+                <div v-for="(file, index) in whitelistFiles" :key="'existing-' + index" class="whitelist-file-item"
+                  :class="file.type === 'file' ? 'file-type' : 'directory-type'">
+
+                  <div class="file-info">
+                    <div class="file-name">
+                      <i class="bi" :class="file.type === 'directory' ? 'bi-folder-fill' : 'bi-file-earmark'"></i>
+                      <strong>[[ file.file_name || file.path.split('/').pop() ]]</strong>
+                    </div>
+                    <div v-if="file.file_directory" class="file-path text-muted">
+                      <i class="bi bi-folder me-1"></i>
+                      [[ file.file_directory ]]
+                    </div>
+                    <div v-else-if="file.path && file.path.includes('/')" class="file-path text-muted">
+                      <i class="bi bi-folder me-1"></i>
+                      [[ file.path.substring(0, file.path.lastIndexOf('/')) ]]
+                    </div>
+                    <div v-else class="file-path text-muted">
+                      <i class="bi bi-folder me-1"></i>
+                      根目录
+                    </div>
+                  </div>
+                  <button class="btn btn-sm btn-outline-primary" @click="deleteFromWhitelist(file.path)"
+                    :disabled="deleteFromWhitelistLoading">
+                    <span v-if="deleteFromWhitelistLoading" class="spinner-border spinner-border-sm me-1"></span>
+                    <i v-else class="bi bi-trash me-1"></i>
+                    移出白名单
                   </button>
                 </div>
                 <div v-for="(file, index) in whitelistFiles" :key="'existing-' + index" class="whitelist-file-item"

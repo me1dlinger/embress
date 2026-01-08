@@ -1258,11 +1258,35 @@ new Vue({
         this.deleteFromWhitelistLoading = false;
       }
     },
+    parsePath(path) {
+      if (!path) return { file_name: "", file_directory: "" };
+
+      // 处理路径分隔符（兼容Windows和Linux）
+      const normalizedPath = path.replace(/\\/g, "/");
+      const lastSlashIndex = normalizedPath.lastIndexOf("/");
+
+      if (lastSlashIndex === -1) {
+        // 只有文件名，没有目录路径
+        return {
+          file_name: path,
+          file_directory: "",
+        };
+      }
+
+      return {
+        file_name: normalizedPath.substring(lastSlashIndex + 1),
+        file_directory: normalizedPath.substring(0, lastSlashIndex),
+      };
+    },
+
+    // 修改addNewWhitelist方法
     addNewWhitelist() {
       const path = this.newWhitelistPath.trim();
       if (!path) return;
+
+      // 检查是否已存在
       const exists =
-        this.whitelistFiles.includes(path) ||
+        this.whitelistFiles.some((file) => file.path === path) ||
         this.newWhitelistItems.some((item) => item.path === path);
 
       if (exists) {
@@ -1274,9 +1298,15 @@ new Vue({
         );
         return;
       }
+
+      // 解析路径信息
+      const pathInfo = this.parsePath(path);
+
       this.newWhitelistItems.push({
         path: path,
         type: this.newWhitelistType,
+        file_name: pathInfo.file_name,
+        file_directory: pathInfo.file_directory,
       });
       this.newWhitelistPath = "";
       this.newWhitelistType = "file";
@@ -1290,6 +1320,8 @@ new Vue({
       return this.newWhitelistItems.map((item) => ({
         path: item.path,
         type: item.type,
+        file_name: item.file_name,
+        file_directory: item.file_directory,
         timestamp: new Date().toISOString(),
       }));
     },

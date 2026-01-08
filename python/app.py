@@ -9,15 +9,18 @@ import logging
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
+
 from apscheduler.schedulers.background import BackgroundScheduler  # type: ignore
-from apscheduler.schedulers.base import STATE_PAUSED, STATE_RUNNING  # type: ignore
+from apscheduler.schedulers.base import (  # type: ignore
+    STATE_PAUSED,
+    STATE_RUNNING,
+    STATE_STOPPED,
+)
 from database import config_db
 from email_notifier import EmailNotifier
 from embress_renamer import EmbressRenamer, WhitelistLoader
 from flask import Flask, jsonify, render_template, request  # type: ignore
 from logging_utils import DailyFileHandler
-from apscheduler.schedulers.base import STATE_PAUSED, STATE_RUNNING, STATE_STOPPED
-
 
 LOGS_PATH = Path(os.getenv("LOG_PATH", "./data/logs"))
 MEDIA_PATH = os.getenv("MEDIA_PATH", "./data/media")
@@ -32,6 +35,7 @@ app = Flask(__name__)
 app.logger.propagate = False
 renamer = EmbressRenamer(MEDIA_PATH)
 scheduler = BackgroundScheduler()
+
 email_notifier = EmailNotifier()
 
 WHITELIST_ENDPOINTS = {
@@ -109,29 +113,30 @@ def authenticate():
     return jsonify({"success": False, "message": "访问密钥错误"})
 
 
-
 @app.route("/api/status")
 def get_status():
-    job = scheduler.get_job(job_id="scan_job")
-    scheduler_state = scheduler.state
-    next_run_time = None
-
-    if scheduler_state == STATE_RUNNING and job and job.next_run_time:
-        next_run_time = job.next_run_time.astimezone().strftime("%Y-%m-%d %H:%M:%S")
-    elif scheduler_state == STATE_PAUSED:
+    job = scheduler.get_job("scan_job")
+    if not job:
+        scheduler_state = STATE_STOPPED
+        next_run_time = None
+    elif job.next_run_time is None:
+        scheduler_state = STATE_PAUSED
         next_run_time = "已暂停"
-    elif scheduler_state == STATE_STOPPED:
-        next_run_time = "未启动"
     else:
-        next_run_time = "未知"
+        scheduler_state = STATE_RUNNING
+        next_run_time = job.next_run_time.astimezone().strftime("%Y-%m-%d %H:%M:%S")
+
     last_scan = config_db.get_last_scan_result()
     last_effect_scan = config_db.get_last_effect_scan_result()
+
     if last_scan and "unrenamed_files" in last_scan:
         last_scan["unrenamed_files"] = enrich_path_fields(last_scan["unrenamed_files"])
+
     if last_effect_scan and "unrenamed_files" in last_effect_scan:
         last_effect_scan["unrenamed_files"] = enrich_path_fields(
             last_effect_scan["unrenamed_files"]
         )
+
     return jsonify(
         {
             "media_path": MEDIA_PATH,
@@ -142,9 +147,11 @@ def get_status():
             "total_scans": config_db.get_scan_history_count(),
             "total_whitelist": len(config_db.get_whitelist()),
             "next_scan_time": next_run_time,
-            "scheduler_state_name": {0: "已停止", 1: "运行中", 2: "已暂停"}.get(
-                scheduler_state, f"UNKNOWN({scheduler_state})"
-            ),
+            "scheduler_state_name": {
+                STATE_STOPPED: "已停止",
+                STATE_RUNNING: "运行中",
+                STATE_PAUSED: "已暂停",
+            }.get(scheduler_state, f"UNKNOWN({scheduler_state})"),
         }
     )
 
@@ -152,29 +159,29 @@ def get_status():
 @app.route("/api/scheduler/toggle", methods=["POST"])
 def toggle_scheduler():
     try:
-        state = scheduler.state
+        job = scheduler.get_job("scan_job")
+        if not job:
+            return jsonify({"success": False, "message": "扫描任务不存在"}), 404
 
-        if state == STATE_RUNNING:
-            scheduler.pause()
-            msg = "调度器已暂停"
-        elif state == STATE_PAUSED:
-            scheduler.resume()
-            msg = "调度器已恢复"
+        if job.next_run_time is None:
+            job.resume()
+            msg = "扫描任务已启动"
+            running = True
         else:
-            scheduler.start()
-            msg = "调度器已启动"
+            job.pause()
+            msg = "扫描任务已停止"
+            running = False
 
         app.logger.info(msg)
         return jsonify(
             {
                 "success": True,
-                "running": scheduler.running,
-                "state": scheduler.state,
+                "scan_job_running": running,
                 "message": msg,
             }
         )
     except Exception as exc:
-        app.logger.exception("切换调度器状态失败")
+        app.logger.exception("切换扫描任务状态失败")
         return jsonify({"success": False, "message": str(exc)}), 500
 
 
@@ -275,6 +282,7 @@ def rename_file():
     except Exception as e:
         app.logger.exception("文件重命名失败")
         return jsonify({"success": False, "message": f"文件重命名失败: {str(e)}"}), 500
+
 
 @app.route("/api/rollback", methods=["POST"])
 def rollback_season():
@@ -587,10 +595,10 @@ def clean_old_logs():
     deleted_files = []
 
     for log_file in log_dir.glob("*.log"):
-        # 只处理emby_renamer_和app_开头的日志文件
         if not (
             log_file.name.startswith("emby_renamer_")
             or log_file.name.startswith("app_")
+            or log_file.name.startswith("email_notifier_")
         ):
             continue
 
@@ -616,16 +624,21 @@ def clean_old_logs():
 if __name__ == "__main__":
     setup_logging()
     clean_old_logs()
+
     if not scheduler.running:
-        scheduler.add_job(
+        # 扫描任务（默认暂停）
+        scan_job = scheduler.add_job(
             func=scheduled_scan,
             trigger="interval",
-            seconds=600,
+            seconds=SCAN_INTERVAL,
             id="scan_job",
             name="文件扫描任务",
             start_date=get_aligned_start(SCAN_INTERVAL),
             replace_existing=True,
         )
+        scan_job.pause()
+
+        # 日志清理任务（始终运行）
         scheduler.add_job(
             func=clean_old_logs,
             trigger="cron",
@@ -635,9 +648,11 @@ if __name__ == "__main__":
             name="日志清理任务",
             replace_existing=True,
         )
+
         scheduler.start()
         app.logger.info(
-            f"The scheduled task has been initiated, scan interval: {SCAN_INTERVAL}, first execution time: {get_aligned_start(SCAN_INTERVAL)}"
+            "Scheduler started. scan_job is paused by default, log_cleanup_job is active."
         )
+
     port = int(os.getenv("FLASK_PORT", 15000))
     app.run(host="0.0.0.0", port=port, debug=False)
