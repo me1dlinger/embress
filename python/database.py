@@ -11,7 +11,7 @@ import sqlite3
 import threading
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, Optional
 import functools
 import time
 
@@ -100,6 +100,7 @@ class ConfigDB:
             self._local.cursor.execute("PRAGMA journal_mode=WAL;")
             self._local.cursor.execute("PRAGMA foreign_keys=ON;")
             self._local.cursor.execute("PRAGMA busy_timeout=30000;")  # 30秒忙等待
+            self._local.cursor.execute("PRAGMA synchronous=NORMAL;")  # WAL 下兼顾性能与安全
             self._ensure_initialized()
         return self._local.conn, self._local.cursor
 
@@ -169,6 +170,38 @@ class ConfigDB:
         self._add_column_if_missing("scan_history", "renamed_audio INTEGER DEFAULT 0")
         self._add_column_if_missing("scan_history", "renamed_picture INTEGER DEFAULT 0")
         self._init_change_record_table()
+
+        # change_record 增加 source 列（regex / ai），用于区分重命名来源
+        self._add_column_if_missing("change_record", "source TEXT DEFAULT 'regex'")
+
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS ai_binding (
+                path TEXT PRIMARY KEY,
+                model TEXT,
+                prompt TEXT,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                added_time TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+        )
+
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS ai_provider (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                base_url TEXT NOT NULL,
+                api_key TEXT,
+                model TEXT,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                is_default INTEGER NOT NULL DEFAULT 0,
+                added_time TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+        )
+        self._add_column_if_missing("ai_binding", "provider_id INTEGER")
+        conn.commit()
 
     def _init_change_record_table(self):
         conn, cursor = self._get_connection()
@@ -397,53 +430,68 @@ class ConfigDB:
         return None
 
     def add_change_records(self, records: List[Dict]):
-        """批量添加变更记录到数据库，避免重复"""
+        """批量写入变更记录：单事务提交，避免逐条 commit 带来的开销与锁竞争"""
+        if not records:
+            return
         conn, cursor = self._get_connection()
-        for record in records:
-            path = record.get("path")
-            original = record.get("original")
-            record_type = record.get("type")
-            season_dir = record.get("season_dir")
-            status = record.get("status")
-            if self.record_exists(path, original, record_type, status):
-                updates = {
-                    "new": record.get("new"),
-                    "status": record.get("status"),
-                    "error": record.get("error"),
-                    "timestamp": datetime.now().isoformat(),
-                    "rollback": record.get("rollback", 0),
-                }
+        try:
+            for record in records:
+                path = record.get("path")
+                original = record.get("original")
+                record_type = record.get("type")
+                status = record.get("status")
 
-                if record.get("status") != "skip":
-                    updates = {k: v for k, v in updates.items() if v is not None}
-                    if updates:
-                        self.update_existing_record(
-                            path, original, record_type, **updates
-                        )
-            else:
                 cursor.execute(
-                    """
-                    INSERT INTO change_record 
-                    (path, original, new, type, status, error, timestamp, media_type, 
-                    show_name, season_name, rollback, season_dir)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        path,
-                        original,
-                        record.get("new"),
-                        record_type,
-                        record.get("status"),
-                        record.get("error"),
-                        record.get("timestamp"),
-                        record.get("media_type"),
-                        record.get("show_name"),
-                        record.get("season_name"),
-                        1 if record.get("rollback") else 0,
-                        season_dir,
-                    ),
+                    "SELECT id FROM change_record "
+                    "WHERE path = ? AND original = ? AND type = ? AND status = ? LIMIT 1;",
+                    (path, original, record_type, status),
                 )
-        conn.commit()
+                row = cursor.fetchone()
+                if row:
+                    if status == "skip":
+                        continue
+                    cursor.execute(
+                        "UPDATE change_record SET new = ?, status = ?, error = ?, "
+                        "timestamp = ?, rollback = ?, source = COALESCE(?, source) "
+                        "WHERE id = ?;",
+                        (
+                            record.get("new"),
+                            status,
+                            record.get("error"),
+                            datetime.now().isoformat(),
+                            1 if record.get("rollback") else 0,
+                            record.get("source"),
+                            row[0],
+                        ),
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        INSERT INTO change_record
+                        (path, original, new, type, status, error, timestamp, media_type,
+                        show_name, season_name, rollback, season_dir, source)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            path,
+                            original,
+                            record.get("new"),
+                            record_type,
+                            status,
+                            record.get("error"),
+                            record.get("timestamp"),
+                            record.get("media_type"),
+                            record.get("show_name"),
+                            record.get("season_name"),
+                            1 if record.get("rollback") else 0,
+                            record.get("season_dir"),
+                            record.get("source", "regex"),
+                        ),
+                    )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
 
     def get_change_records_by_shows(self, limit: int = 200) -> List[Dict]:
         conn, cursor = self._get_connection()
@@ -453,7 +501,8 @@ class ConfigDB:
                 media_type,show_name,
                 COUNT(*) as record_count,
                 MAX(timestamp) as latest_timestamp,
-                GROUP_CONCAT(DISTINCT type) as types
+                GROUP_CONCAT(DISTINCT type) as types,
+                MAX(CASE WHEN source = 'ai' THEN 1 ELSE 0 END) as ai
             FROM change_record 
             WHERE status = 'success'
             GROUP BY media_type,show_name
@@ -472,7 +521,6 @@ class ConfigDB:
             )
             shows.append(show_data)
 
-        conn.close()
         return shows
 
     def get_change_records_by_show(
@@ -482,7 +530,7 @@ class ConfigDB:
         cursor.execute(
             """
             SELECT path, original, new, type, status, error, timestamp,
-                media_type, show_name, season_name, rollback, season_dir
+                media_type, show_name, season_name, rollback, season_dir, source
             FROM change_record 
             WHERE status = 'success' AND media_type = ? AND show_name = ? 
             ORDER BY timestamp DESC 
@@ -493,7 +541,6 @@ class ConfigDB:
 
         columns = [desc[0] for desc in cursor.description]
         records = [dict(zip(columns, row)) for row in cursor.fetchall()]
-        conn.close()
         return records
 
     def record_exists(
@@ -547,7 +594,7 @@ class ConfigDB:
         cursor.execute(
             """
             SELECT path, original, new, type, status, error, timestamp, 
-                media_type, rollback
+                media_type, rollback, source
             FROM change_record 
             WHERE season_dir = ?
             ORDER BY timestamp DESC
@@ -568,10 +615,155 @@ class ConfigDB:
                     "timestamp": row[6],
                     "media_type": row[7],
                     "rollback": bool(row[8]),
+                    "source": row[9],
                 }
             )
 
         return records
+
+    # ========= AI 绑定 ========= #
+    def get_ai_bindings(self) -> List[Dict]:
+        conn, cursor = self._get_connection()
+        cursor.execute(
+            "SELECT path, model, prompt, enabled, added_time, provider_id "
+            "FROM ai_binding ORDER BY added_time DESC;"
+        )
+        return [
+            {
+                "path": row[0],
+                "model": row[1],
+                "prompt": row[2],
+                "enabled": bool(row[3]),
+                "timestamp": row[4],
+                "provider_id": row[5],
+            }
+            for row in cursor.fetchall()
+        ]
+
+    def add_ai_binding(
+        self, path: str, model: str = None, prompt: str = None, provider_id: int = None
+    ):
+        conn, cursor = self._get_connection()
+        cursor.execute(
+            "INSERT INTO ai_binding (path, model, prompt, enabled, provider_id) "
+            "VALUES (?, ?, ?, 1, ?) "
+            "ON CONFLICT(path) DO UPDATE SET model = excluded.model, "
+            "prompt = excluded.prompt, provider_id = excluded.provider_id, enabled = 1;",
+            (path, model, prompt, provider_id),
+        )
+        conn.commit()
+
+    def remove_ai_binding(self, path: str) -> bool:
+        conn, cursor = self._get_connection()
+        cursor.execute("DELETE FROM ai_binding WHERE path = ?;", (path,))
+        conn.commit()
+        return cursor.rowcount > 0
+
+    # ========= AI 供应商 ========= #
+    _PROVIDER_COLS = (
+        "id, name, base_url, api_key, model, enabled, is_default, added_time"
+    )
+
+    @staticmethod
+    def _provider_row(row) -> Dict:
+        return {
+            "id": row[0],
+            "name": row[1],
+            "base_url": row[2],
+            "api_key": row[3],
+            "model": row[4],
+            "enabled": bool(row[5]),
+            "is_default": bool(row[6]),
+            "timestamp": row[7],
+        }
+
+    def get_ai_providers(self) -> List[Dict]:
+        conn, cursor = self._get_connection()
+        cursor.execute(
+            f"SELECT {self._PROVIDER_COLS} FROM ai_provider "
+            "ORDER BY is_default DESC, id ASC;"
+        )
+        return [self._provider_row(row) for row in cursor.fetchall()]
+
+    def get_ai_provider(self, provider_id: int) -> Optional[Dict]:
+        conn, cursor = self._get_connection()
+        cursor.execute(
+            f"SELECT {self._PROVIDER_COLS} FROM ai_provider WHERE id = ?;",
+            (provider_id,),
+        )
+        row = cursor.fetchone()
+        return self._provider_row(row) if row else None
+
+    def get_default_ai_provider(self) -> Optional[Dict]:
+        conn, cursor = self._get_connection()
+        cursor.execute(
+            f"SELECT {self._PROVIDER_COLS} FROM ai_provider "
+            "WHERE enabled = 1 ORDER BY is_default DESC, id ASC LIMIT 1;"
+        )
+        row = cursor.fetchone()
+        return self._provider_row(row) if row else None
+
+    def add_ai_provider(
+        self,
+        name: str,
+        base_url: str,
+        api_key: str = None,
+        model: str = None,
+        enabled: bool = True,
+        is_default: bool = False,
+    ) -> int:
+        conn, cursor = self._get_connection()
+        try:
+            if is_default:
+                cursor.execute("UPDATE ai_provider SET is_default = 0;")
+            cursor.execute(
+                "INSERT INTO ai_provider "
+                "(name, base_url, api_key, model, enabled, is_default) "
+                "VALUES (?, ?, ?, ?, ?, ?);",
+                (
+                    name,
+                    base_url,
+                    api_key,
+                    model,
+                    1 if enabled else 0,
+                    1 if is_default else 0,
+                ),
+            )
+            conn.commit()
+            return cursor.lastrowid
+        except sqlite3.IntegrityError as exc:
+            conn.rollback()
+            raise ValueError(f"供应商名称已存在: {name}") from exc
+
+    def update_ai_provider(self, provider_id: int, **fields):
+        allowed = {"name", "base_url", "api_key", "model", "enabled", "is_default"}
+        updates = {k: v for k, v in fields.items() if k in allowed and v is not None}
+        if not updates:
+            return
+        conn, cursor = self._get_connection()
+        try:
+            if updates.get("is_default"):
+                cursor.execute("UPDATE ai_provider SET is_default = 0;")
+            sets = ", ".join(f"{k} = ?" for k in updates)
+            values = []
+            for key, value in updates.items():
+                values.append(1 if value else 0 if key in ("enabled", "is_default") else value)
+            values.append(provider_id)
+            cursor.execute(f"UPDATE ai_provider SET {sets} WHERE id = ?;", values)
+            conn.commit()
+        except sqlite3.IntegrityError as exc:
+            conn.rollback()
+            raise ValueError(f"供应商名称已存在: {updates.get('name')}") from exc
+
+    def remove_ai_provider(self, provider_id: int) -> bool:
+        conn, cursor = self._get_connection()
+        cursor.execute(
+            "UPDATE ai_binding SET provider_id = NULL WHERE provider_id = ?;",
+            (provider_id,),
+        )
+        cursor.execute("DELETE FROM ai_provider WHERE id = ?;", (provider_id,))
+        conn.commit()
+        return cursor.rowcount > 0
 
     def close(self):
         if hasattr(self._local, "conn"):

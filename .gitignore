@@ -2,3 +2,4 @@ myenv/
 python/__pycache__/
 data/
 .idea/
+AGENTS.md

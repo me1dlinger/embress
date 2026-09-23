@@ -4,1401 +4,1282 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='img/logo-slim.svg') }} ">
-  <link rel="shortcut icon" type="image/x-icon" href="{{ url_for('static', filename='img/logo-slim.svg') }} ">
-  <title>文件重命名</title>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet" />
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.0/font/bootstrap-icons.min.css"
+  <meta name="theme-color" content="#f7f7f8" />
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem("theme");
+        if (t !== "light" && t !== "dark") {
+          t = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+        document.documentElement.setAttribute("data-theme", t);
+      } catch (e) { /* 忽略隐私模式下的存储异常 */ }
+    })();
+  </script>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/logo-slim.svg') }}" />
+  <title>EMBRESS · 文件重命名</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700;900&display=swap"
     rel="stylesheet" />
-  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.1.8/vue.min.js"></script>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}" />
 </head>
 
 <body>
   <div id="app" v-cloak>
-    <nav class="navbar navbar-expand-lg">
-      <div class="container app-container">
-        <a class="navbar-brand" href="#">
-          <i class="bi bi-hdd-stack"></i>文件重命名
-        </a>
-        <div class="navbar-nav ms-auto" id="auth-status">
-          <span v-if="isAuthenticated" class="navbar-text text-success">
-            <i class="bi bi-check-circle"></i> 已验证
-          </span>
-          <span v-else class="auth-status unauthenticated">未认证</span>
-        </div>
-      </div>
-    </nav>
-    <div v-if="!isAuthenticated" class="container app-container" id="auth-container">
-      <div class="auth-container">
-        <div class="auth-form-container animated">
-          <div class="card auth-card">
-            <div class="auth-card-header">
-              <h4><i class="bi bi-shield-lock me-2"></i>访问验证</h4>
-            </div>
-            <div class="auth-card-body">
-              <form @submit.prevent="authenticate">
-                <div class="mb-4">
-                  <label for="access-key" class="form-label fw-medium">访问密钥</label>
-                  <input type="password" class="form-control" id="access-key" v-model="accessKey" required
-                    autocomplete="off" placeholder="请输入您的访问密钥" />
-                </div>
-                <button type="submit" class="btn btn-primary w-100 btn-lg" :disabled="authLoading">
-                  <span v-if="authLoading" class="spinner-border spinner-border-sm" role="status"></span>
-                  <span class="btn-text"></span>
-                  [[ authLoading ? '验证中...' : '验证' ]]
-                  </span>
-                </button>
-              </form>
-              <div v-if="authError" class="alert alert-danger mt-3 py-2 border-0">
-                <i class="bi bi-exclamation-circle me-2"></i>
-                <span> [[ authError ]] </span>
-              </div>
-            </div>
+
+    <!-- 访问验证 -->
+    <div v-if="!isAuthenticated" class="auth-page">
+      <div class="auth-card">
+        <div class="auth-brand">
+          <img src="{{ url_for('static', filename='img/logo.svg') }}" alt="EMBRESS" />
+          <div>
+            <strong>EMBRESS</strong>
+            <span>Media Renamer</span>
           </div>
         </div>
-      </div>
-    </div>
-
-    <div v-if="isAuthenticated" class="container-fluid app-container" id="main-content">
-      <div class="row mt-4">
-        <div class="col-12">
-          <!-- 选项卡导航 -->
-          <ul class="nav nav-tabs" id="main-tabs" role="tablist">
-            <li class="nav-item" role="presentation">
-              <button class="nav-link" :class="{ active: activeTab === 'dashboard' }" @click="activeTab = 'dashboard'"
-                type="button" role="tab">
-                <i class="bi bi-speedometer2 me-2"></i> 仪表板
-              </button>
-            </li>
-            <li class="nav-item" role="presentation">
-              <button class="nav-link" :class="{ active: activeTab === 'history' }" @click="activeTab = 'history'"
-                type="button" role="tab">
-                <i class="bi bi-clock-history me-2"></i> 扫描历史
-              </button>
-            </li>
-            <li class="nav-item" role="presentation">
-              <button class="nav-link" :class="{ active: activeTab === 'records' }" @click="activeTab = 'records'"
-                type="button" role="tab">
-                <i class="bi bi-list-ul me-2"></i> 变更记录
-              </button>
-            </li>
-            <li class="nav-item" role="presentation">
-              <button class="nav-link" :class="{ active: activeTab === 'logs' }" @click="activeTab = 'logs'"
-                type="button" role="tab">
-                <i class="bi bi-file-text me-2"></i> 日志查看
-              </button>
-            </li>
-          </ul>
-
-          <!-- 选项卡内容 -->
-          <div class="tab-content mt-4">
-            <!-- 仪表板 -->
-            <div v-show="activeTab === 'dashboard'" class="tab-pane fade show active">
-              <div class="row mt-4">
-                <div class="col-lg-7">
-                  <div class="dashboard-card status-card">
-                    <div class="card-header d-flex align-items-center">
-                      <i class="bi bi-info-circle me-2"></i>
-                      <span>系统状态</span>
-                      <button class="btn btn-sm btn-outline-primary ms-auto" @click="loadSystemStatus">
-                        <i class="bi bi-arrow-clockwise me-1"></i> 刷新
-                      </button>
-                    </div>
-                    <div class="card-body">
-                      <div v-if="statusLoading" class="d-flex justify-content-center py-4">
-                        <div class="spinner-border text-primary" role="status">
-                          <span class="visually-hidden">加载中...</span>
-                        </div>
-                      </div>
-                      <div v-else-if="systemStatus">
-                        <div class="row">
-                          <div class="col-6"><strong>媒体路径:</strong></div>
-                          <div class="col-6">
-                            [[ systemStatus.media_path ]]
-                          </div>
-                        </div>
-                        <div class="row mt-2">
-                          <div class="col-6"><strong>白名单数量:</strong></div>
-                          <div class="col-6">
-                            <span class="badge bg-info" @click="showWhitelist">
-                              [[ systemStatus.total_whitelist ]]
-                            </span>
-
-                          </div>
-                        </div>
-                        <div class="row mt-2">
-                          <div class="col-6">
-                            <strong>调度器状态:</strong>
-                          </div>
-                          <div class="col-6">
-                            <span class="badge" :class="systemStatus.scheduler_running ? 'bg-success' : 'bg-danger'"
-                              @click="toogleSchedulerState">
-                              [[ systemStatus.scheduler_state_name]]
-                            </span>
-                          </div>
-                        </div>
-                        <div class="row mt-2">
-                          <div class="col-6"><strong>扫描间隔:</strong></div>
-                          <div class="col-6">
-                            <span class="badge bg-secondary" @click="openScanIntervalModal" class="col-6">
-                              [[ formatInterval(systemStatus.scan_interval) ]]
-                            </span>
-                          </div>
-                        </div>
-                        <div class="row mt-2">
-                          <div class="col-6"><strong>下次扫描:</strong></div>
-                          <div class="col-6">
-                            [[ systemStatus.next_scan_time ]]
-                          </div>
-                        </div>
-
-                        <div class="row mt-2">
-                          <div class="col-6">
-                            <strong>总扫描次数:</strong>
-                          </div>
-                          <div class="col-6">
-                            [[ systemStatus.total_scans ]]
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="col-lg-5">
-                  <div class="dashboard-card action-card">
-                    <div class="card-header d-flex align-items-center">
-                      <i class="bi bi-gear me-2"></i>
-                      <span>操作面板</span>
-                    </div>
-                    <div class="card-body">
-                      <div class="row mt-2">
-                        <div class="col-6">
-                          <button class="btn w-100 mb-3" style="background-color: #4285F4;" @click="performManualScan"
-                            :disabled="scanLoading">
-
-                            <span style="color: white;">
-                              <span v-if="scanLoading" class="spinner-border spinner-border-sm" role="status">
-
-                              </span><i v-else class="bi bi-search me-2"></i>
-                              [[ scanLoading ? '扫描中...' : '全部扫描' ]]</span>
-                          </button>
-                        </div>
-                        <div class="col-6">
-                          <button class="btn w-100 mb-3" style="background-color: #34A853;"
-                            @click="showSubPathModal = true">
-
-                            <span style="color: white;"><i class="bi bi-folder2-open me-2"></i>指定扫描</span>
-                          </button>
-
-                        </div>
-
-                      </div>
-                      <div class="row mt-2">
-                        <div class="col-6">
-                          <button class="btn w-100 mb-3" style="background-color: #9B59B6;" @click="showRegexConfig">
-                            <span style="color: white;"><i class="bi bi-gear me-2"></i>正则配置</span>
-                          </button>
-                        </div>
-                        <div class="col-6">
-                          <button class="btn w-100 mb-3" style="background-color: #F39C12;"
-                            @click="showSubPathRollbackModal = true">
-                            <span style="color: white;"><i class="bi bi-signpost me-2"></i>指定还原</span>
-                          </button>
-                        </div>
-                      </div>
-
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="row mt-4">
-                <div class="col-6">
-                  <div class="dashboard-card">
-                    <div class="card-header d-flex align-items-center">
-                      <i class="bi bi-clock me-2"></i>
-                      <span>最新扫描结果</span>
-                    </div>
-                    <div class="card-body p-4">
-                      <div v-if="!lastScanResult"
-                        class="d-flex flex-column align-items-center justify-content-center py-5">
-                        <i class="bi bi-clock-history mb-3" style="font-size: 2.5rem; color: #ddd"></i>
-                        <p class="text-muted">暂无扫描结果</p>
-                      </div>
-                      <div v-else>
-                        <div class="alert"
-                          :class="lastScanResult.status === 'error' ? 'alert-danger' : 'alert-success'">
-                          <h6>
-                            <i class="bi"
-                              :class="lastScanResult.status === 'error' ? 'bi-x-circle' : 'bi-check-circle'"></i>
-                            [[ lastScanResult.status === 'error' ? '扫描失败'
-                            : lastScanResult.scan_type=='rollback'?'回滚完成':'扫描完成' ]]
-                          </h6>
-                          <p class="mb-2">
-                            <strong>时间:</strong> [[
-                            formatDate(lastScanResult.timestamp) ]]
-                          </p>
-                          <div v-if="lastScanResult.status !== 'error'">
-                            <p class="mb-2">
-                              <strong>处理文件:</strong> [[
-                              lastScanResult.processed ]]
-                            </p>
-                            <div v-if="lastScanResult.deleted_nfo" class="d-flex align-items-center mb-2">
-                              <strong class="me-2">删除:</strong>
-                              <span>[[ lastScanResult.deleted_nfo ]] 个nfo文件</span>
-                            </div>
-                            <div class="d-flex align-items-center mb-2">
-                              <strong class="me-2">重命名:</strong>
-                              <span>[[ lastScanResult.renamed?lastScanResult.renamed:0 ]] 个视频 | [[
-                                lastScanResult.renamed_subtitle?lastScanResult.renamed_subtitle:0 ]] 个字幕 | [[
-                                lastScanResult.renamed_audio?lastScanResult.renamed_audio:0 ]] 个音频 | [[
-                                lastScanResult.renamed_picture?lastScanResult.renamed_picture:0 ]] 张图片</span>
-                              <span v-if="lastScanResult.unrenamed_count > 0" class="ms-3">
-                                <span class="badge bg-warning text-dark me-2">
-                                  <i class="bi bi-exclamation-triangle me-1"></i>
-                                  [[ lastScanResult.unrenamed_count ]] 个未重命名
-                                </span>
-                                <button class="btn btn-sm btn-outline-warning"
-                                  @click="showUnrenamedFiles(lastScanResult.unrenamed_files)">
-                                  <i class="bi bi-eye me-1"></i>查看
-                                </button>
-                              </span>
-                            </div>
-                          </div>
-                          <div v-else>
-                            <p class="mb-0">
-                              <strong>错误信息:</strong> [[
-                              lastScanResult.message ]]
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div class="col-6">
-                  <div class="dashboard-card">
-                    <div class="card-header d-flex align-items-center">
-                      <i class="bi bi-clock me-2"></i>
-                      <span>上一次有效扫描</span>
-                    </div>
-                    <div class="card-body p-4">
-                      <div v-if="!lastEffectScanResult"
-                        class="d-flex flex-column align-items-center justify-content-center py-5">
-                        <i class="bi bi-clock-history mb-3" style="font-size: 2.5rem; color: #ddd"></i>
-                        <p class="text-muted">暂无扫描结果</p>
-                      </div>
-                      <div v-else>
-                        <div class="alert"
-                          :class="lastEffectScanResult.status === 'error' ? 'alert-danger' : 'alert-success'">
-                          <h6>
-                            <i class="bi"
-                              :class="lastEffectScanResult.status === 'error' ? 'bi-x-circle' : 'bi-check-circle'"></i>
-                            [[ lastEffectScanResult.status === 'error' ? '扫描失败'
-                            : lastEffectScanResult.scan_type=='rollback'?'回滚完成':'扫描完成' ]]
-                          </h6>
-                          <p class="mb-2">
-                            <strong>时间:</strong> [[
-                            formatDate(lastEffectScanResult.timestamp) ]]
-                          </p>
-                          <div v-if="lastScanResult.status !== 'error'">
-                            <p class="mb-2">
-                              <strong>处理文件:</strong> [[
-                              lastEffectScanResult.processed ]]
-                            </p>
-                            <div v-if="lastEffectScanResult.deleted_nfo" class="d-flex align-items-center mb-2">
-                              <strong class="me-2">删除:</strong>
-                              <span>[[ lastEffectScanResult.deleted_nfo ]] 个nfo文件</span>
-                            </div>
-                            <div class="d-flex align-items-center mb-2">
-                              <strong class="me-2">重命名:</strong>
-                              <span>[[ lastEffectScanResult.renamed?lastEffectScanResult.renamed:0 ]] 个视频 | [[
-                                lastEffectScanResult.renamed_subtitle?lastEffectScanResult.renamed_subtitle:0 ]] 个字幕 |
-                                [[
-                                lastEffectScanResult.renamed_audio?lastEffectScanResult.renamed_audio:0 ]] 个音频 | [[
-                                lastEffectScanResult.renamed_picture?lastEffectScanResult.renamed_picture:0 ]]
-                                张图片</span>
-                              <span v-if="lastEffectScanResult.unrenamed_count > 0" class="ms-3">
-                                <span class="badge bg-warning text-dark me-2">
-                                  <i class="bi bi-exclamation-triangle me-1"></i>
-                                  [[ lastEffectScanResult.unrenamed_count ]] 个未重命名
-                                </span>
-                                <button class="btn btn-sm btn-outline-warning"
-                                  @click="showUnrenamedFiles(lastEffectScanResult.unrenamed_files)">
-                                  <i class="bi bi-eye me-1"></i>查看
-                                </button>
-                              </span>
-                            </div>
-                          </div>
-                          <div v-else>
-                            <p class="mb-0">
-                              <strong>错误信息:</strong> [[
-                              lastEffectScanResult.message ]]
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- 扫描历史 -->
-            <div :class="['tab-pane', 'fade', { show: activeTab==='history', active: activeTab==='history' }]"
-              v-show="activeTab==='history'">
-              <div class="row mt-4">
-                <div class="col-12">
-                  <div class="dashboard-card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                      <div class="d-flex align-items-center">
-                        <i class="bi bi-clock-history me-2"></i>
-                        <span>扫描历史</span>
-                      </div>
-                      <div class="d-flex gap-2">
-                        <button class="btn btn-sm btn-outline-secondary" :class="{ active: showFilteredOnly }"
-                          @click="toggleFilter">
-                          <i class="bi bi-funnel me-1"></i>
-                          [[showFilteredOnly ? '显示全部' : '仅显示有效操作']]
-                        </button>
-                        <button class="btn btn-sm btn-outline-primary" @click="loadHistory">
-                          <i class="bi bi-arrow-clockwise me-1"></i> 刷新
-                        </button>
-                      </div>
-                    </div>
-                    <div class="card-body">
-                      <div v-if="historyLoading" class="d-flex justify-content-center py-5">
-                        <div class="spinner-border text-primary" role="status">
-                          <span class="visually-hidden">加载中...</span>
-                        </div>
-                      </div>
-                      <div v-else-if="history.length == 0 && !showFilteredOnly">
-                        <p class="text-muted">暂无扫描历史</p>
-                      </div>
-                      <div v-else-if="history.length == 0 && showFilteredOnly">
-                        <div class="text-center py-5">
-                          <i class="bi bi-search text-muted" style="font-size: 3rem;"></i>
-                          <p class="text-muted mt-2">暂无有效操作记录</p>
-                          <p class="text-muted small">尝试切换到显示全部记录</p>
-                        </div>
-                      </div>
-                      <div v-else class="row">
-                        <div v-for="(record, index) in history" :key="index" class="col-md-6 mb-3">
-                          <div class="history-card" :class="record.status === 'error' ? 'error-card' : 'success-card'">
-                            <div class="card-header"
-                              :class="record.status === 'error' ? 'error-header' : 'success-header'">
-                              <h6 v-if="record.scan_type=='rollback'" class="card-title mb-0">
-                                <i class="status-icon bi"
-                                  :class="record.status === 'error' ? 'bi-x-circle' : 'bi-check-circle'"></i>
-                                回滚 # [[ history.length - index ]]
-                              </h6>
-                              <h6 v-else class="card-title mb-0">
-                                <i class="status-icon bi"
-                                  :class="record.status === 'error' ? 'bi-x-circle' : 'bi-check-circle'"></i>
-                                扫描 # [[ history.length - index ]]
-                              </h6>
-                            </div>
-                            <div class="card-body">
-                              <div class="timestamp-section">
-                                <small class="timestamp">
-                                  <i class="bi bi-calendar me-1"></i>
-                                  [[ formatDate(record.timestamp) ]]
-                                </small>
-                              </div>
-
-                              <div v-if="record.status !== 'error'">
-                                <div class="target-section">
-                                  <small class="section-label">目录:</small>
-                                  <div class="target-path">[[ record.target ]]</div>
-                                </div>
-
-                                <div class="stats-grid">
-                                  <div class="stat-box main-stat">
-                                    <div class="stat-number">[[ record.processed ]]</div>
-                                    <div class="stat-label">处理文件</div>
-                                  </div>
-                                  <div class="stat-box main-stat">
-                                    <div class="stat-number">[[ record.renamed || 0 ]]</div>
-                                    <div class="stat-label">重命名视频</div>
-                                  </div>
-                                </div>
-
-                                <div class="detail-stats">
-                                  <div class="detail-stat">
-                                    <i class="bi history-stat-icon" :class="getTypeIcon('subtitle_rename')"></i>
-                                    <span>[[ record.renamed_subtitle || 0 ]] 字幕</span>
-                                  </div>
-                                  <div class="detail-stat">
-                                    <i class="bi history-stat-icon" :class="getTypeIcon('audio_rename')"></i>
-                                    <span>[[ record.renamed_audio || 0 ]] 音频</span>
-                                  </div>
-                                  <div class="detail-stat">
-                                    <i class="bi history-stat-icon" :class="getTypeIcon('picture_rename')"></i>
-                                    <span>[[ record.renamed_picture || 0 ]] 图片</span>
-                                  </div>
-                                  <div class="detail-stat">
-                                    <i class="bi history-stat-icon" :class="getTypeIcon('nfo_delete')"></i>
-                                    <span>[[ record.deleted_nfo || 0 ]] NFO</span>
-                                  </div>
-                                </div>
-
-                                <div v-if="record.unrenamed_count > 0" class="unrenamed-section">
-                                  <div class="unrenamed-content">
-                                    <span class="unrenamed-badge">
-                                      <i class="bi bi-exclamation-triangle me-1"></i>
-                                      [[ record.unrenamed_count ]] 个未重命名
-                                    </span>
-                                    <button class="btn btn-sm btn-outline-warning unrenamed-btn"
-                                      @click="showUnrenamedFiles(record.unrenamed_files)">
-                                      <i class="bi bi-eye me-1"></i>查看详情
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-                              <div v-else class="error-content">
-                                <div class="error-message">
-                                  <i class="bi bi-exclamation-triangle me-2"></i>
-                                  <strong>错误:</strong> [[ record.message ]]
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-
-            <!-- 变更记录 -->
-            <div :class="['tab-pane', 'fade', { show: activeTab==='records', active: activeTab==='records' }]"
-              v-show="activeTab==='records'">
-              <div class="row mt-4">
-                <div class="col-12">
-                  <div class="dashboard-card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                      <div class="d-flex align-items-center">
-                        <i class="bi bi-list-ul me-2"></i>
-                        <span v-if="selectedShow.media_type">[[ selectedShow.media_type ]] - [[ selectedShow.show_name
-                          ]]
-                          - 变更记录</span>
-                        <span v-else>节目变更记录</span>
-                      </div>
-                      <div class="d-flex gap-2">
-                        <button v-if="selectedShow.media_type" class="btn btn-sm btn-outline-secondary"
-                          @click="goBackToShows">
-                          <i class="bi bi-arrow-left me-1"></i> 返回列表
-                        </button>
-                        <button class="btn btn-sm btn-outline-primary" @click="loadChangeRecords">
-                          <i class="bi bi-arrow-clockwise me-1"></i> 刷新
-                        </button>
-                      </div>
-                    </div>
-                    <div class="card-body">
-                      <div v-if="recordsLoading" class="d-flex justify-content-center py-5">
-                        <div class="spinner-border text-primary" role="status">
-                          <span class="visually-hidden">加载中...</span>
-                        </div>
-                      </div>
-
-                      <!-- 节目列表视图 -->
-                      <div v-else-if="!selectedShow.media_type">
-                        <div v-if="showsChangeList.length === 0">
-                          <p class="text-muted">暂无变更记录</p>
-                        </div>
-                        <div v-else>
-                          <div class="mb-3">
-                            <div class="input-group">
-                              <span class="input-group-text">
-                                <i class="bi bi-search"></i>
-                              </span>
-                              <input type="text" class="form-control" placeholder="搜索节目名称..." v-model="showSearchQuery"
-                                @input="filterShows">
-                              <button class="btn btn-outline-secondary" type="button" @click="clearSearch"
-                                v-if="showSearchQuery">
-                                <i class="bi bi-x"></i>
-                              </button>
-                            </div>
-                          </div>
-                          <div v-if="filteredShowsChangeList.length === 0">
-                            <p class="text-muted">未找到匹配的节目</p>
-                          </div>
-                          <div v-else>
-                            <div v-for="show in filteredShowsChangeList" :key="show.show_name" class="show-item mb-3"
-                              @click="selectShow(show.media_type,show.show_name)">
-                              <div class="d-flex justify-content-between align-items-center">
-                                <div class="flex-grow-1">
-                                  <h6 class="mb-1 d-flex align-items-center copy-title">
-                                    <i class="bi bi-tv me-2"></i>
-                                    [[ show.media_type ]] - [[ show.show_name ]]
-                                  </h6>
-                                  <div class="d-flex align-items-center gap-3">
-                                    <span class="badge bg-primary">[[ show.record_count ]] 条记录</span>
-                                    <div class="type-badges">
-                                      <span v-for="type in show.types" :key="type" class="badge bg-secondary me-1">
-                                        [[ getTypeLabel(type) ]]
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                                <div class="text-end">
-                                  <small class="text-muted d-block">最后更新</small>
-                                  <small class="text-muted">[[ formatDate(show.latest_timestamp) ]]</small>
-                                  <div class="mt-1">
-                                    <i class="bi bi-chevron-right"
-                                      @click="selectShow(show.media_type,show.show_name)"></i>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <!-- 节目详细记录视图 -->
-                      <div v-else>
-                        <div v-if="selectedShowRecords.length === 0">
-                          <p class="text-muted">该节目暂无变更记录</p>
-                        </div>
-                        <div v-else>
-                          <!-- 统计信息 -->
-                          <div class="statistics-section mb-4">
-                            <h6 class="mb-3">
-                              <i class="bi bi-bar-chart me-2"></i>
-                              统计信息
-                            </h6>
-                            <div class="row g-3 justify-content-center">
-                              <div class="col-md-2" v-for="(count, type) in recordTypeStats" :key="type">
-                                <div class="stat-card text-center">
-                                  <div class="stat-icon">
-                                    <i :class="getTypeIcon(type)"></i>
-                                  </div>
-                                  <div class="stat-number">[[ count ]]</div>
-                                  <div class="stat-label">[[ getTypeLabel(type) ]]</div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          <!-- 新增：分组方式选择 -->
-                          <div class="grouping-section mb-4">
-                            <div class="d-flex align-items-center gap-3">
-                              <span class="fw-medium">分组方式：</span>
-                              <div class="btn-group" role="group">
-                                <button type="button" class="btn btn-sm"
-                                  :class="groupBy === 'type' ? 'btn-primary' : 'btn-outline-primary'"
-                                  @click="setGroupBy('type')">
-                                  <i class="bi bi-tags me-1"></i>
-                                  按类型分组
-                                </button>
-                                <button type="button" class="btn btn-sm"
-                                  :class="groupBy === 'season' ? 'btn-primary' : 'btn-outline-primary'"
-                                  @click="setGroupBy('season')">
-                                  <i class="bi bi-collection me-1"></i>
-                                  按季度分组
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-
-                          <!-- 修改：筛选控制 - 根据分组方式显示不同的筛选选项 -->
-                          <div class="filter-section mb-4">
-                            <div class="d-flex align-items-center gap-3">
-                              <span class="fw-medium">筛选[[groupBy === 'type' ? '类型' : '季度']]: </span>
-                              <div class="btn-group" role="group">
-                                <button type="button" class="btn btn-sm"
-                                  :class="selectedTypeFilter === 'all' ? 'btn-primary' : 'btn-outline-primary'"
-                                  @click="setTypeFilter('all')">
-                                  全部 ([[ selectedShowRecords.length ]])
-                                </button>
-                                <template v-if="groupBy === 'type'">
-                                  <button type="button" v-for="(count, type) in recordTypeStats" :key="type"
-                                    class="btn btn-sm"
-                                    :class="selectedTypeFilter === type ? 'btn-primary' : 'btn-outline-primary'"
-                                    @click="setTypeFilter(type)">
-                                    [[ getTypeLabel(type) ]] ([[ count ]])
-                                  </button>
-                                </template>
-                                <template v-else>
-                                  <button type="button" v-for="(count, season) in seasonStats" :key="season"
-                                    class="btn btn-sm"
-                                    :class="selectedTypeFilter === season ? 'btn-primary' : 'btn-outline-primary'"
-                                    @click="setTypeFilter(season)">
-                                    [[ season ]] ([[ count ]])
-                                  </button>
-                                </template>
-                              </div>
-                            </div>
-                            <div class="mt-2">
-                              <small class="text-muted">
-                                显示 [[ filteredRecords.length ]] 条记录
-                                <span v-if="selectedTypeFilter !== 'all'">
-                                  - [[ groupBy === 'type' ? getTypeLabel(selectedTypeFilter) : selectedTypeFilter ]]
-                                </span>
-                              </small>
-                            </div>
-                          </div>
-
-                          <!-- 修改：按分组方式展示记录 -->
-                          <div v-if="selectedTypeFilter === 'all'">
-                            <div v-for="(records, groupKey) in groupedRecords" :key="groupKey" class="type-group mb-4">
-                              <div class="type-group-header">
-                                <h6 class="mb-0">
-                                  <i :class="groupBy === 'type' ? getTypeIcon(groupKey) : getSeasonIcon(groupKey)"
-                                    class="me-2"></i>
-                                  <span v-if="groupBy === 'type'">
-                                    [[getTypeLabel(groupKey)]]
-                                  </span>
-                                  <span v-else-if="records.length>0"
-                                    @click.stop="copyText(records[0].season_relative_path)"
-                                    :title="'点击复制路径:'+records[0].season_relative_path">[[groupKey]] </span>
-                                  <span v-else>[[groupKey]] </span>
-                                  <span class="badge bg-light text-dark ms-2">[[ records.length ]]</span>
-                                </h6>
-                              </div>
-                              <div class="type-group-content">
-                                <div v-for="(record, index) in records" :key="index" class="record-item mb-3"
-                                  :class="{ failed: record.status !== 'success' }">
-                                  <div class="d-flex justify-content-between align-items-start">
-                                    <div class="flex-grow-1">
-                                      <h6 class="mb-1">
-                                        <span v-if="record.rollback">
-                                          <i class="bi bi-arrow-counterclockwise text-warning"></i>
-                                          [已回滚]
-                                        </span>
-                                        <i v-else class="bi"
-                                          :class="record.status === 'success' ? 'bi-check-circle text-success' : 'bi-x-circle text-danger'"></i>
-                                        <span v-if="groupBy === 'season'">[[ getTypeLabel(record.type) ]] -
-                                        </span>
-                                        <span @click.stop="copyText(record.season_relative_path)"
-                                          :title="'点击复制路径:'+record.season_relative_path"> [[ record.season_name
-                                          ]]</span>
-                                      </h6>
-                                      <div class="file-info">
-                                        <div v-if="record.type === 'nfo_delete'" class="mb-1">
-                                          <strong>删除文件:</strong>
-                                          <code class="filename">[[ record.original ]]</code>
-                                        </div>
-                                        <div v-else>
-                                          <div class="mb-1">
-                                            <strong>原文件:</strong>
-                                            <code class="filename" v-if="record.rollback">[[ record.new ]]</code>
-                                            <code class="filename" v-else>[[ record.original ]]</code>
-                                          </div>
-                                          <div class="mb-1">
-                                            <strong>新文件:</strong>
-                                            <code class="filename" v-if="record.rollback">[[ record.original ]]</code>
-                                            <code class="filename" v-else>[[ record.new ]]</code>
-                                          </div>
-                                          <div class="mb-1">
-                                            <strong>路径:</strong>
-                                            <code class="filename" @click.stop="copyText(record.relative_path)"
-                                              :title="'点击复制路径:'+record.relative_path">[[ record.relative_path ]]</code>
-                                          </div>
-                                        </div>
-                                      </div>
-                                      <p v-if="record.error" class="mb-1 text-danger">
-                                        <strong>错误:</strong> [[ record.error ]]
-                                      </p>
-                                    </div>
-                                    <div class="text-end">
-                                      <small class="text-muted">
-                                        [[ formatDate(record.timestamp) ]]
-                                      </small>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          <!-- 筛选后的记录展示保持不变 -->
-                          <div v-else>
-                            <div v-for="(record, index) in filteredRecords" :key="index" class="record-item mb-3"
-                              :class="{ failed: record.status !== 'success' }">
-                              <div class="d-flex justify-content-between align-items-start">
-                                <div class="flex-grow-1">
-                                  <h6 class="mb-1">
-                                    <span v-if="record.rollback">
-                                      <i class="bi bi-arrow-counterclockwise text-warning"></i>
-                                      [已回滚]
-                                    </span>
-                                    <i v-else class="bi"
-                                      :class="record.status === 'success' ? 'bi-check-circle text-success' : 'bi-x-circle text-danger'"></i>
-                                    [[ record.season_name ]]
-                                  </h6>
-                                  <div class="file-info">
-                                    <div v-if="record.type === 'nfo_delete'" class="mb-1">
-                                      <strong>删除文件:</strong>
-                                      <code class="filename">[[ record.original ]]</code>
-                                    </div>
-                                    <div v-else>
-                                      <div class="mb-1">
-                                        <strong>原文件:</strong>
-                                        <code class="filename" v-if="record.rollback">[[ record.new ]]</code>
-                                        <code class="filename" v-else>[[ record.original ]]</code>
-                                      </div>
-                                      <div class="mb-1">
-                                        <strong>新文件:</strong>
-                                        <code class="filename" v-if="record.rollback">[[ record.original ]]</code>
-                                        <code class="filename" v-else>[[ record.new ]]</code>
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <p v-if="record.error" class="mb-1 text-danger">
-                                    <strong>错误:</strong> [[ record.error ]]
-                                  </p>
-                                </div>
-                                <div class="text-end">
-                                  <small class="text-muted">
-                                    [[ formatDate(record.timestamp) ]]
-                                  </small>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- 日志查看 -->
-            <div :class="['tab-pane', 'fade', { show: activeTab==='logs', active: activeTab==='logs' }]"
-              v-show="activeTab==='logs'">
-              <div class="row mt-4">
-                <div class="col-12">
-                  <div class="dashboard-card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                      <div class="d-flex align-items-center">
-                        <i class="bi bi-file-text me-2"></i>
-                        <span>日志文件</span>
-                      </div>
-                      <button class="btn btn-sm btn-outline-primary" @click="loadLogFiles">
-                        <i class="bi bi-arrow-clockwise me-1"></i> 刷新
-                      </button>
-                    </div>
-                    <div class="card-body">
-                      <div class="row">
-                        <div class="col-md-4">
-                          <div class="list-group log-files-list">
-                            <div v-if="logsLoading" class="d-flex justify-content-center p-4">
-                              <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
-                            </div>
-                            <div v-else-if="logFiles.length === 0" class="p-3 text-muted">
-                              暂无日志文件
-                            </div>
-                            <a v-else v-for="log in logFiles" :key="log.name" href="#"
-                              class="list-group-item list-group-item-action"
-                              :class="{ active: selectedLogFile === log.name }"
-                              @click.prevent="loadLogContent(log.name)">
-                              <div class="d-flex w-100 justify-content-between">
-                                <h6 class="mb-1">[[ log.name ]]</h6>
-                                <small>
-                                  [[ (log.size / 1024).toFixed(1) ]] KB</small>
-                              </div>
-                              <small class="text-muted">
-                                [[ formatDate(log.modified) ]]
-                              </small>
-                            </a>
-                          </div>
-                        </div>
-                        <div class="col-md-8">
-                          <div class="log-content rounded p-3">
-                            <div v-if="logContentLoading" class="text-center p-3">
-                              <div class="spinner-border" role="status"></div>
-                            </div>
-                            <div v-else-if="!selectedLogFile">
-                              <p class="text-muted">请选择日志文件查看内容</p>
-                            </div>
-                            <div v-else-if="logContentError" class="alert alert-danger">
-                              [[ logContentError ]]
-                            </div>
-                            <pre v-else> [[ logContent ]] </pre>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+        <h1>访问验证</h1>
+        <p class="sub">输入访问密钥以进入控制台</p>
+        <form class="auth-form" @submit.prevent="authenticate">
+          <div>
+            <label class="label" for="access-key">访问密钥</label>
+            <div class="field-affix">
+              <i class="bi bi-shield-lock"></i>
+              <input id="access-key" type="password" class="input" v-model="accessKey" required autocomplete="off"
+                placeholder="请输入访问密钥" />
             </div>
           </div>
-        </div>
-      </div>
-    </div>
-    <div v-if="showModal" class="custom-modal-overlay" @click.self="closeModal">
-      <div class="custom-modal" :class="'modal-' + modalType" :style="{ display: showModal ? 'block' : 'none' }">
-        <div class="custom-modal-header">
-          <i class="modal-icon bi" :class="modalIcon"></i>
-          <h5 class="modal-title">[[ modalTitle ]]</h5>
-        </div>
-        <div class="custom-modal-body">
-          <p>[[ modalContent ]]</p>
-        </div>
-        <div class="custom-modal-footer">
-          <button v-if="hasCancel" @click="closeModal" class="modal-btn modal-btn-secondary">取消</button>
-          <button @click="confirmAction" class="modal-btn modal-btn-primary">确定</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="toast-container">
-      <div v-for="toast in toasts" :key="toast.id" class="toast-item"
-        :class="['toast-' + toast.type, { 'toast-show': toast.visible }]" @click="removeToast(toast.id)">
-        <div class="toast-content">
-          <i class="toast-icon bi" :class="getToastIcon(toast.type)"></i>
-          <div class="toast-text">
-            <div class="toast-title" v-if="toast.title">[[ toast.title ]]</div>
-            <div class="toast-message">[[ toast.message ]]</div>
-          </div>
-          <button class="toast-close" @click.stop="removeToast(toast.id)">
-            <i class="bi bi-x"></i>
+          <button type="submit" class="btn btn-primary btn-lg btn-block" :disabled="authLoading">
+            <span v-if="authLoading" class="spinner"></span>
+            <i v-else class="bi bi-box-arrow-in-right"></i>
+            [[ authLoading ? '验证中…' : '验证并进入' ]]
           </button>
-        </div>
-        <div class="toast-progress" :style="{ animationDuration: toast.duration + 'ms' }"></div>
+          <div v-if="authError" class="note note-danger">
+            <i class="bi bi-exclamation-circle"></i>
+            <span>[[ authError ]]</span>
+          </div>
+        </form>
       </div>
     </div>
-    <transition name="fade">
-      <div v-if="showScanIntervalModal" class="modal-overlay" @click.self="showScanIntervalModal = false"
-        @keydown.esc="showScanIntervalModal = false" tabindex="0">
-        <div class="modal-content-custom animated">
-          <div class="modal-header">
-            <h5 class="modal-title">
-              <i class="bi bi-clock me-2"></i> 扫描间隔配置
-            </h5>
-            <button type="button" class="btn-close" @click="showScanIntervalModal = false"></button>
-          </div>
 
-          <div class="modal-body">
-            <div class="mb-3">
-              <label class="form-label fw-medium">扫描间隔（秒）</label>
-              <input type="number" class="form-control" v-model.number="scanInterval" min="20" max="86400"
-                placeholder="请输入扫描间隔（60-86400秒）">
-              <div class="form-text">
-                当前设置：[[ formatInterval(scanInterval) ]]
+    <!-- 主应用 -->
+    <div v-else class="app">
+      <header class="appbar">
+        <div class="appbar-inner">
+          <a class="brand" href="#" @click.prevent="refreshActive">
+            <img src="{{ url_for('static', filename='img/logo.svg') }}" alt="EMBRESS" />
+            <span class="brand-name">EMBRESS</span>
+          </a>
+          <nav class="topnav">
+            <button v-for="item in navItems" :key="item.key" type="button" class="topnav-item"
+              :class="{ active: activeTab === item.key }" @click="selectTab(item.key)">
+              <i class="bi" :class="item.icon"></i>
+              <span>[[ item.label ]]</span>
+            </button>
+          </nav>
+          <div class="appbar-actions">
+            <span class="status-pill"><span class="dot"></span>已连接</span>
+            <button type="button" class="btn btn-ghost btn-icon" @click="toggleTheme"
+              :title="theme === 'dark' ? '切换为日间模式' : '切换为夜间模式'" aria-label="切换主题">
+              <i class="bi" :class="theme === 'dark' ? 'bi-sun' : 'bi-moon-stars'"></i>
+            </button>
+            <button type="button" class="btn btn-ghost btn-icon" @click="refreshActive" title="刷新" aria-label="刷新">
+              <i class="bi bi-arrow-clockwise"></i>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main class="view">
+        <div class="page-head">
+          <h1>[[ tabMeta ]]</h1>
+        </div>
+
+          <!-- 仪表板 -->
+          <section v-show="activeTab === 'dashboard'">
+            <div class="kpi-grid">
+              <div class="kpi clickable" @click="toogleSchedulerState">
+                <div class="kpi-top">
+                  <span class="kpi-label">调度器状态</span>
+                  <span class="kpi-icon"><i class="bi bi-broadcast"></i></span>
+                </div>
+                <div class="kpi-value">
+                  <span class="dot"
+                    :class="systemStatus && systemStatus.scheduler_running ? 'on' : 'off'"></span>[[ systemStatus ?
+                  systemStatus.scheduler_state_name : '—' ]]
+                </div>
+                <div class="kpi-foot">点击切换运行状态</div>
+              </div>
+              <div class="kpi clickable" @click="openScanIntervalModal">
+                <div class="kpi-top">
+                  <span class="kpi-label">扫描间隔</span>
+                  <span class="kpi-icon"><i class="bi bi-clock-history"></i></span>
+                </div>
+                <div class="kpi-value">[[ systemStatus ? formatInterval(systemStatus.scan_interval) : '—' ]]</div>
+                <div class="kpi-foot">点击修改扫描周期</div>
+              </div>
+              <div class="kpi clickable" @click="showWhitelist">
+                <div class="kpi-top">
+                  <span class="kpi-label">白名单数量</span>
+                  <span class="kpi-icon"><i class="bi bi-shield-check"></i></span>
+                </div>
+                <div class="kpi-value">[[ systemStatus ? systemStatus.total_whitelist : '—' ]]</div>
+                <div class="kpi-foot">点击管理白名单</div>
+              </div>
+              <div class="kpi">
+                <div class="kpi-top">
+                  <span class="kpi-label">累计扫描次数</span>
+                  <span class="kpi-icon"><i class="bi bi-activity"></i></span>
+                </div>
+                <div class="kpi-value">[[ systemStatus ? systemStatus.total_scans : '—' ]]</div>
+                <div class="kpi-foot">历史累计执行次数</div>
               </div>
             </div>
 
-            <div v-if="scanIntervalError" class="alert alert-danger py-2">
-              <i class="bi bi-exclamation-circle me-2"></i>
-              [[ scanIntervalError ]]
-            </div>
-          </div>
-
-          <div class="modal-footer">
-            <button class="btn btn-primary" @click="updateScanInterval" :disabled="scanIntervalLoading">
-              <span v-if="scanIntervalLoading" class="spinner-border spinner-border-sm"></span>
-              <span v-else>保存</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </transition>
-    <transition name="fade">
-      <div v-if="showSubPathModal" class="modal-overlay" @click.self="closeSubPathModal"
-        @keydown.esc="closeSubPathModal" tabindex="0">
-        <div class="modal-content-custom animated">
-          <div class="modal-header">
-            <h5 class="modal-title">
-              <i class="bi bi-folder2-open me-2"></i> 指定路径扫描
-            </h5>
-            <button type="button" class="btn-close" @click="closeSubPathModal"></button>
-          </div>
-
-          <div class="modal-body">
-            <label class="form-label fw-medium mb-2">路径</label>
-            <input type="text" class="form-control" v-model="subPath" placeholder="例如：Anime/葬送的芙莉莲/Season 01"
-              autocomplete="off" />
-          </div>
-
-          <div class="modal-footer">
-            <!-- <button class="btn btn-secondary" @click="closeSubPathModal">取消</button> -->
-            <button class="btn btn-primary" @click="performSubScan" :disabled="subScanLoading">
-              <span v-if="subScanLoading" class="spinner-border spinner-border-sm"></span>
-              <span v-else>扫描</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </transition>
-    <transition name="fade">
-      <div v-if="showSubPathRollbackModal" class="modal-overlay" @click.self="closeSubPathRollbackModal"
-        @keydown.esc="closeSubPathModal" tabindex="0">
-        <div class="modal-content-custom animated">
-          <div class="modal-header">
-            <h5 class="modal-title">
-              <i class="bi bi-folder2-open me-2"></i> 指定路径还原
-            </h5>
-            <button type="button" class="btn-close" @click="closeSubPathRollbackModal"></button>
-          </div>
-
-          <div class="modal-body">
-            <label class="form-label fw-medium mb-2">季度/文件 路径</label>
-            <input type="text" class="form-control" v-model="subPath" placeholder="例如：Anime/葬送的芙莉莲/Season 01"
-              autocomplete="off" />
-            <p class="form-text mb-3"> 可在变更记录页点击复制季度/文件路径</p>
-          </div>
-
-          <div class="modal-footer">
-            <button class="btn btn-primary" @click="performSubRollBack" :disabled="subScanLoading">
-              <span v-if="subScanLoading" class="spinner-border spinner-border-sm"></span>
-              <span v-else>回滚</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </transition>
-    <transition name="fade">
-      <div v-if="showUnrenamedModal" class="modal-overlay" @click.self="closeUnrenamedModal"
-        @keydown.esc="closeUnrenamedModal" tabindex="0">
-        <div class="modal-content-custom animated unrenamed-modal">
-          <div class="modal-header">
-            <h5 class="modal-title">
-              <i class="bi bi-exclamation-triangle me-2 text-warning"></i> 未重命名文件列表
-            </h5>
-            <button type="button" class="btn-close" @click="closeUnrenamedModal"></button>
-          </div>
-
-          <div class="modal-body">
-            <div v-if="unrenamedFiles.length === 0" class="text-center py-4 text-muted">
-              <i class="bi bi-check-circle mb-2" style="font-size: 2rem;"></i>
-              <p>暂无未重命名文件</p>
-            </div>
-            <div v-else>
-              <p class="text-muted mb-3">
-                <i class="bi bi-info-circle me-1"></i>
-                共 <strong>[[ unrenamedFiles.length ]]</strong> 个文件未能重命名，您可以将这些文件添加到白名单中以跳过处理，或手动重命名。
-              </p>
-              <div class="unrenamed-files-list">
-                <div v-for="(file, index) in unrenamedFiles" :key="index" class="unrenamed-file-item"
-                  :class="{ 'file-item-editing': file.isRenaming }">
-
-                  <div class="rename-container">
-                    <!-- 正常显示状态 -->
-                    <div v-if="!file.isRenaming" class="file-info">
-                      <div class="file-name">
-                        <i class="bi bi-file-earmark me-2"></i>
-                        <strong>[[ file.file_name ]]</strong>
-                      </div>
-                      <div class="file-path text-muted">
-                        <i class="bi bi-folder me-1"></i>
-                        [[ file.file_directory ]]
-                      </div>
-                    </div>
-
-                    <!-- 重命名编辑状态 -->
-                    <div v-else class="file-info">
-                      <div class="file-name">
-                        <i class="bi bi-file-earmark me-2"></i>
-                        <strong>[[ file.file_name ]]</strong>
-                        <span class="text-muted ms-2">(正在重命名)</span>
-                      </div>
-                      <div class="file-path text-muted">
-                        <i class="bi bi-folder me-1"></i>
-                        [[ file.file_directory ]]
-                      </div>
-                      <div class="rename-input-group">
-                        <input type="text" class="rename-input" :class="{ 'is-invalid': file.renameError }"
-                          v-model="file.newFileName" @keyup.enter="confirmRename(file, index)"
-                          @keyup.esc="cancelRename(file, index)" placeholder="输入新文件名" :id="'rename-input-' + index">
-                        <div class="rename-actions">
-                          <button class="rename-btn rename-btn-confirm" @click="confirmRename(file, index)"
-                            :disabled="renameLoading || !file.newFileName || file.newFileName.trim() === ''"
-                            title="确认重命名">
-                            <span v-if="renameLoading && file.isSubmitting"
-                              class="spinner-border spinner-border-sm"></span>
-                            <i v-else class="bi bi-check"></i>
-                          </button>
-                          <button class="rename-btn rename-btn-cancel" @click="cancelRename(file, index)"
-                            :disabled="renameLoading && file.isSubmitting" title="取消重命名">
-                            <i class="bi bi-x"></i>
-                          </button>
-                        </div>
-                      </div>
-                      <div v-if="file.renameError" class="rename-error">
-                        [[ file.renameError ]]
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="file-actions">
-                    <button v-if="!file.isRenaming" class="btn btn-sm btn-rename-action btn-outline me-2"
-                      @click="startRename(file, index)" :disabled="whitelistLoading || renameLoading">
-                      <i class="bi bi-pencil me-1"></i>
-                      重命名
+            <div class="dash-grid">
+              <div class="panel">
+                <div class="panel-head">
+                  <div class="ttl"><i class="bi bi-lightning-charge"></i><span>操作面板</span></div>
+                </div>
+                <div class="panel-body">
+                  <div class="action-grid">
+                    <button type="button" class="action-btn" @click="performManualScan" :disabled="scanLoading">
+                      <span class="ai">
+                        <span v-if="scanLoading" class="spinner"></span>
+                        <i v-else class="bi bi-search"></i>
+                      </span>
+                      <span>
+                        <span class="at">全部扫描</span>
+                        <span class="ad">[[ scanLoading ? '正在扫描…' : '扫描整个媒体库' ]]</span>
+                      </span>
                     </button>
-                    <button class="btn btn-sm btn-outline-primary" @click="addToWhitelist(file.path)"
-                      :disabled="whitelistLoading || renameLoading || file.isRenaming">
-                      <span v-if="whitelistLoading" class="spinner-border spinner-border-sm me-1"></span>
-                      <i v-else class="bi bi-plus-circle me-1"></i>
-                      加入白名单
+                    <button type="button" class="action-btn" @click="showSubPathModal = true">
+                      <span class="ai"><i class="bi bi-folder2-open"></i></span>
+                      <span>
+                        <span class="at">指定扫描</span>
+                        <span class="ad">只处理指定目录</span>
+                      </span>
+                    </button>
+                    <button type="button" class="action-btn" @click="showRegexConfig">
+                      <span class="ai"><i class="bi bi-sliders"></i></span>
+                      <span>
+                        <span class="at">正则配置</span>
+                        <span class="ad">维护识别规则</span>
+                      </span>
+                    </button>
+                    <button type="button" class="action-btn" @click="showSubPathRollbackModal = true">
+                      <span class="ai"><i class="bi bi-arrow-counterclockwise"></i></span>
+                      <span>
+                        <span class="at">指定还原</span>
+                        <span class="ad">回滚季度或文件</span>
+                      </span>
+                    </button>
+                    <button type="button" class="action-btn action-ai" @click="showAiConfig">
+                      <span class="ai"><i class="bi bi-stars"></i></span>
+                      <span>
+                        <span class="at">AI 重命名</span>
+                        <span class="ad">为指定目录绑定 AI 模型</span>
+                      </span>
+                    </button>
+                    <button type="button" class="action-btn action-ai" @click="showProviderConfig">
+                      <span class="ai"><i class="bi bi-hdd-network"></i></span>
+                      <span>
+                        <span class="at">模型供应商</span>
+                        <span class="ad">配置并测试多个 AI 服务</span>
+                      </span>
                     </button>
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
 
-          <div class="modal-footer">
-            <button class="btn btn-secondary" @click="closeUnrenamedModal">关闭</button>
-          </div>
-        </div>
-      </div>
-    </transition>
-    <transition name="fade">
-      <div v-if="showWhitelistModal" class="modal-overlay" @click.self="closeWhitelistModal"
-        @keydown.esc="closeWhitelistModal" tabindex="0">
-        <div class="modal-content-custom animated unrenamed-modal">
-          <div class="modal-header">
-            <h5 class="modal-title">
-              白名单文件列表
-            </h5>
-            <button type="button" class="btn-close" @click="closeWhitelistModal"></button>
-          </div>
-          <div class="modal-body">
-            <div class="whitelist-add-section">
-              <h6 class="section-title">
-                <i class="bi bi-plus-circle me-2"></i>添加白名单
-              </h6>
-              <div class="row mb-3">
-                <div class="col-md-8">
-                  <input type="text" class="form-control" v-model="newWhitelistPath" placeholder="输入文件路径或目录路径..."
-                    @keyup.enter="addNewWhitelist">
-                </div>
-                <div class="col-md-4">
-                  <div class="btn-group w-100" role="group">
-                    <input type="radio" class="btn-check" name="whitelistType" id="file-type" value="file"
-                      v-model="newWhitelistType">
-                    <label class="btn btn-outline-primary btn-sm" for="file-type">
-                      <i class="bi bi-file-earmark me-1"></i>文件
-                    </label>
-
-                    <input type="radio" class="btn-check" name="whitelistType" id="dir-type" value="directory"
-                      v-model="newWhitelistType">
-                    <label class="btn btn-outline-primary btn-sm" for="dir-type">
-                      <i class="bi bi-folder me-1"></i>目录
-                    </label>
+              <div class="panel">
+                <div class="panel-head">
+                  <div class="ttl"><i class="bi bi-info-circle"></i><span>系统状态</span></div>
+                  <div class="tools">
+                    <button type="button" class="btn btn-ghost btn-sm" @click="loadSystemStatus"
+                      :disabled="statusLoading">
+                      <i class="bi bi-arrow-clockwise"></i>刷新
+                    </button>
                   </div>
                 </div>
-              </div>
-              <button class="btn btn-primary btn-sm mb-3" @click="addNewWhitelist" :disabled="!newWhitelistPath.trim()">
-                <i class="bi bi-plus-circle me-1"></i>添加到白名单
-              </button>
-              <hr>
-            </div>
-            <div v-if="whitelistFiles.length === 0 && newWhitelistItems.length === 0"
-              class="text-center py-4 text-muted">
-              <i class="bi bi-check-circle mb-2" style="font-size: 2rem;"></i>
-              <p>暂无白名单文件</p>
-            </div>
-            <div v-else>
-              <p class="text-muted mb-3">
-                <i class="bi bi-info-circle me-1"></i>
-                共 <strong>[[ whitelistFiles.length + newWhitelistItems.length ]]</strong> 个项目在白名单中
-                <span v-if="newWhitelistItems.length > 0" class="badge bg-info ms-2">
-                  新增 [[ newWhitelistItems.length ]] 个
-                </span>
-              </p>
-
-              <div class="whitelist-files-list">
-                <!-- 修改新增项显示部分 -->
-                <div v-for="(item, index) in newWhitelistItems" :key="'new-' + index"
-                  class="whitelist-file-item new-item">
-                  <div class="file-info">
-                    <div class="file-name">
-                      <i class="bi" :class="item.type === 'directory' ? 'bi-folder-fill' : 'bi-file-earmark'"></i>
-                      <strong>[[ item.file_name ]]</strong>
-                      <span class="badge bg-success ms-2">新增</span>
-                      <span class="badge" :class="item.type === 'directory' ? 'bg-warning' : 'bg-info'">
-                        [[ item.type === 'directory' ? '目录' : '文件' ]]
+                <div class="panel-body">
+                  <div v-if="statusLoading" class="loading-box">
+                    <span class="spinner spinner-brand"></span><span>加载中…</span>
+                  </div>
+                  <div v-else-if="systemStatus" class="status-list">
+                    <div class="status-row">
+                      <span class="k"><i class="bi bi-folder"></i>媒体路径</span>
+                      <span class="v mono">[[ systemStatus.media_path ]]</span>
+                    </div>
+                    <div class="status-row">
+                      <span class="k"><i class="bi bi-shield-check"></i>白名单数量</span>
+                      <span class="v"><span class="chip chip-info">[[ systemStatus.total_whitelist ]]</span></span>
+                    </div>
+                    <div class="status-row">
+                      <span class="k"><i class="bi bi-broadcast"></i>调度器状态</span>
+                      <span class="v">
+                        <span class="chip"
+                          :class="systemStatus.scheduler_running ? 'chip-success' : 'chip-danger'">[[ systemStatus.scheduler_state_name ]]</span>
                       </span>
                     </div>
-                    <div v-if="item.file_directory" class="file-path text-muted">
-                      <i class="bi bi-folder me-1"></i>
-                      [[ item.file_directory ]]
+                    <div class="status-row">
+                      <span class="k"><i class="bi bi-clock-history"></i>扫描间隔</span>
+                      <span class="v">[[ formatInterval(systemStatus.scan_interval) ]]</span>
                     </div>
-                    <div v-else class="file-path text-muted">
-                      <i class="bi bi-folder me-1"></i>
-                      根目录
-                    </div>
-                  </div>
-                  <button class="btn btn-sm btn-outline-danger" @click="removeNewWhitelistItem(index)">
-                    <i class="bi bi-trash me-1"></i>移除
-                  </button>
-                </div>
-
-                <!-- 修改现有白名单项显示部分 -->
-                <div v-for="(file, index) in whitelistFiles" :key="'existing-' + index" class="whitelist-file-item"
-                  :class="file.type === 'file' ? 'file-type' : 'directory-type'">
-
-                  <div class="file-info">
-                    <div class="file-name">
-                      <i class="bi" :class="file.type === 'directory' ? 'bi-folder-fill' : 'bi-file-earmark'"></i>
-                      <strong>[[ file.file_name || file.path.split('/').pop() ]]</strong>
-                    </div>
-                    <div v-if="file.file_directory" class="file-path text-muted">
-                      <i class="bi bi-folder me-1"></i>
-                      [[ file.file_directory ]]
-                    </div>
-                    <div v-else-if="file.path && file.path.includes('/')" class="file-path text-muted">
-                      <i class="bi bi-folder me-1"></i>
-                      [[ file.path.substring(0, file.path.lastIndexOf('/')) ]]
-                    </div>
-                    <div v-else class="file-path text-muted">
-                      <i class="bi bi-folder me-1"></i>
-                      根目录
+                    <div class="status-row">
+                      <span class="k"><i class="bi bi-calendar-check"></i>下次扫描</span>
+                      <span class="v">[[ systemStatus.next_scan_time ]]</span>
                     </div>
                   </div>
-                  <button class="btn btn-sm btn-outline-primary" @click="deleteFromWhitelist(file.path)"
-                    :disabled="deleteFromWhitelistLoading">
-                    <span v-if="deleteFromWhitelistLoading" class="spinner-border spinner-border-sm me-1"></span>
-                    <i v-else class="bi bi-trash me-1"></i>
-                    移出白名单
-                  </button>
-                </div>
-                <div v-for="(file, index) in whitelistFiles" :key="'existing-' + index" class="whitelist-file-item"
-                  :class="file.type === 'file' ? 'file-type' : 'directory-type'">
-
-                  <div v-if="file.type=='file'" class="file-info">
-                    <div class="file-name">
-                      <i class="bi bi-file-earmark me-2"></i>
-                      <strong>[[ file.file_name]]</strong>
-                    </div>
-                    <div class="file-path text-muted">
-                      <i class="bi bi-folder me-1"></i>
-                      [[file.file_directory ]]
-                    </div>
-                  </div>
-                  <div v-else class="file-info">
-                    <div class="file-name">
-                      <i class="bi bi-file-earmark me-2"></i>
-                      <strong>[[ file.path ]]</strong>
-                    </div>
-                  </div>
-                  <button class="btn btn-sm btn-outline-primary" @click="deleteFromWhitelist(file.path)"
-                    :disabled="deleteFromWhitelistLoading">
-                    <span v-if="deleteFromWhitelistLoading" class="spinner-border spinner-border-sm me-1"></span>
-                    <i v-else class="bi bi-trash me-1"></i>
-                    移出白名单
-                  </button>
+                  <div v-else class="empty"><i class="bi bi-cloud-slash"></i><p>暂无系统状态</p></div>
                 </div>
               </div>
             </div>
-          </div>
-          <div class="modal-footer">
-            <button class="btn btn-secondary" @click="closeWhitelistModal">关闭</button>
-            <button v-if="newWhitelistItems.length > 0" class="btn btn-success" style="margin-left: 20px;"
-              @click="submitNewWhitelistItems" :disabled="submitWhitelistLoading">
-              <span v-if="submitWhitelistLoading" class="spinner-border spinner-border-sm me-1"></span>
-              <i v-else class="bi bi-check-circle me-1"></i>
-              提交新增项目 ([[ newWhitelistItems.length ]])
-            </button>
-          </div>
-        </div>
-      </div>
-    </transition>
-    <transition name="fade">
-      <div v-if="showRegexModal" class="modal-overlay regex-modal" @click.self="closeRegexModal"
-        @keydown.esc="closeRegexModal" tabindex="0">
-        <div class="modal-content-custom animated">
-          <div class="modal-header">
-            <h5 class="modal-title">
-              <i class="bi bi-code-slash me-2"></i> 正则表达式配置
-              <button type="button" class="btn btn-sm regex-upload-btn me-2" @click="openRegexDebugModal">
-                <i class="bi bi-bug me-2"></i> 调试正则
-              </button>
-              <button type="button" class="btn btn-sm regex-upload-btn me-2" @click="triggerImportFile">
-                <i class="bi bi-upload me-2"></i> 导入配置
-              </button>
 
-            </h5>
-            <input ref="importFileInput" type="file" accept=".json" @change="handleImportFile" style="display: none">
-            <button type="button" class="btn-close btn-sm me-2 " @click="closeRegexModal"></button>
-
-          </div>
-
-          <div class="modal-body">
-            <div v-if="regexLoading" class="d-flex justify-content-center py-4">
-              <div class="spinner-border text-primary" role="status"></div>
-            </div>
-            <div v-else>
-              <div class="row">
-                <div class="col-md-6">
-                  <div class="regex-section">
-                    <div class="regex-section-header">
-                      <h6 class="regex-section-title">
-                        <i class="bi bi-123 me-2"></i> 集数模式正则表达式
-                      </h6>
-                      <button type="button" class="btn btn-sm btn-outline-primary"
-                        @click="addRegexItem('episode_only')">
-                        <i class="bi bi-plus-circle me-1"></i> 添加
-                      </button>
-                    </div>
-                    <p class="form-text mb-3">用于识别只包含集数的文件名格式，如 第01集</p>
-
-                    <div class="regex-list">
-                      <div v-for="(pattern, index) in regexPatterns.episode_only" :key="index" class="regex-item">
-                        <input type="text" class="form-control regex-input" v-model="regexPatterns.episode_only[index]"
-                          placeholder="例如: $$(\d{1,3})$$">
-                        <div class="regex-actions">
-                          <button class="btn btn-outline-danger btn-sm" type="button"
-                            @click="removeRegexItem('episode_only', index)" title="删除">
-                            <i class="bi bi-trash"></i>
-                          </button>
+            <div class="results-grid">
+              <!-- 最新扫描结果 -->
+              <div class="panel">
+                <div class="panel-head">
+                  <div class="ttl"><i class="bi bi-hourglass-split"></i><span>最新扫描结果</span></div>
+                </div>
+                <div class="panel-body">
+                  <div v-if="!lastScanResult" class="empty"><i class="bi bi-clock-history"></i><p>暂无扫描结果</p></div>
+                  <template v-else>
+                    <div class="result-banner" :class="lastScanResult.status === 'error' ? 'err' : 'ok'">
+                      <i class="ic bi"
+                        :class="lastScanResult.status === 'error' ? 'bi-x-circle' : 'bi-check-circle'"></i>
+                      <div>
+                        <h4>[[ lastScanResult.status === 'error' ? '扫描失败' : (lastScanResult.scan_type === 'rollback' ?
+                          '回滚完成' : '扫描完成') ]]</h4>
+                        <div class="result-rows">
+                          <span><b>时间</b> [[ formatDate(lastScanResult.timestamp) ]]</span>
+                          <span v-if="lastScanResult.status !== 'error'"><b>处理文件</b> [[ lastScanResult.processed ]]</span>
+                          <span v-else><b>错误</b> [[ lastScanResult.message ]]</span>
                         </div>
                       </div>
-
-                      <div v-if="regexPatterns.episode_only.length === 0" class="regex-empty">
-                        <i class="bi bi-inbox"></i>
-                        <p>暂无正则表达式</p>
-                      </div>
                     </div>
-                  </div>
-                </div>
-                <div class="col-md-6">
-                  <div class="regex-section">
-                    <div class="regex-section-header">
-                      <h6 class="regex-section-title">
-                        <i class="bi bi-collection me-2"></i> 季集模式正则表达式
-                      </h6>
-                      <button type="button" class="btn btn-sm btn-outline-primary"
-                        @click="addRegexItem('season_episode')">
-                        <i class="bi bi-plus-circle me-1"></i> 添加
-                      </button>
-                    </div>
-                    <p class="form-text mb-3">用于识别包含季数和集数的文件名格式，如 S01E01</p>
-
-                    <div class="regex-list">
-                      <div v-for="(pattern, index) in regexPatterns.season_episode" :key="index" class="regex-item">
-                        <input type="text" class="form-control regex-input"
-                          v-model="regexPatterns.season_episode[index]" placeholder="例如: [Ss](\d{1,2})[Ee](\d{1,3})">
-                        <div class="regex-actions">
-                          <button class="btn btn-outline-danger btn-sm" type="button"
-                            @click="removeRegexItem('season_episode', index)" title="删除">
-                            <i class="bi bi-trash"></i>
-                          </button>
-                        </div>
-                      </div>
-
-                      <div v-if="regexPatterns.season_episode.length === 0" class="regex-empty">
-                        <i class="bi bi-inbox"></i>
-                        <p>暂无正则表达式</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div v-if="regexError" class="alert alert-danger mt-3 py-2">
-                <i class="bi bi-exclamation-circle me-2"></i>
-                [[ regexError ]]
-              </div>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button class="btn btn-primary" @click="saveRegexPatterns" :disabled="regexSaving || regexLoading">
-              <span v-if="regexSaving" class="spinner-border spinner-border-sm me-2"></span>
-              <i v-else class="bi bi-check-circle me-2"></i>
-              [[ regexSaving ? '保存中...' : '保存配置' ]]
-            </button>
-          </div>
-        </div>
-      </div>
-    </transition>
-    <!-- 正则调试弹窗 -->
-    <transition name="fade">
-      <div v-if="showRegexDebugModal" class="modal-overlay" @click.self="closeRegexDebugModal"
-        @keydown.esc="closeRegexDebugModal" tabindex="0">
-        <div class="modal-content-custom animated" style="max-width: 800px;">
-          <div class="modal-header">
-            <h5 class="modal-title">
-              <i class="bi bi-bug me-2"></i> 正则表达式调试器
-            </h5>
-            <button type="button" class="btn-close" @click="closeRegexDebugModal"></button>
-          </div>
-
-          <div class="modal-body">
-            <div class="mb-4">
-              <label class="form-label fw-medium">测试文件名</label>
-              <div class="input-group">
-                <input type="text" class="form-control" v-model="debugFileName" placeholder="输入要测试的文件名，如：S01E02.mkv">
-                <button class="btn btn-primary" @click="runDebug" :disabled="!debugFileName || debugLoading">
-                  <span v-if="debugLoading" class="spinner-border spinner-border-sm"></span>
-                  <i v-else class="bi bi-play"></i> 测试
-                </button>
-              </div>
-              <div class="form-text">输入文件名测试当前配置的所有正则表达式</div>
-            </div>
-
-            <div v-if="debugResults.length > 0" class="debug-results">
-              <div class="d-flex justify-content-between align-items-center mb-3">
-                <h6 class="mb-0">测试结果 (共 [[ debugResults.length ]] 条正则)</h6>
-                <span class="badge bg-success">
-                  匹配成功: [[ debugResults.filter(r => r.matched).length ]]
-                </span>
-              </div>
-              <div class="accordion" id="debugResultsAccordion">
-                <div v-for="(result, index) in debugResults" :key="index" class="accordion-item mb-2">
-                  <h2 class="accordion-header">
-                    <button class="accordion-button" :class="{ 'collapsed': !result.matched }" type="button"
-                      data-bs-toggle="collapse" :data-bs-target="'#debugResultCollapse' + index">
-                      <span class="badge me-2" :class="{
-                    'bg-success': result.matched,
-                    'bg-secondary': !result.matched && !result.error,
-                    'bg-danger': result.error
-                  }">
-                        [[ result.error || (result.matched ? '匹配成功' : '未匹配') ]]
+                    <div v-if="lastScanResult.status !== 'error'" class="statline">
+                      <span>视频<b>[[ lastScanResult.renamed || 0 ]]</b></span>
+                      <span>字幕<b>[[ lastScanResult.renamed_subtitle || 0 ]]</b></span>
+                      <span>音频<b>[[ lastScanResult.renamed_audio || 0 ]]</b></span>
+                      <span>图片<b>[[ lastScanResult.renamed_picture || 0 ]]</b></span>
+                      <span>NFO<b>[[ lastScanResult.deleted_nfo || 0 ]]</b></span>
+                      <span v-if="lastScanResult.unrenamed_count > 0" class="chip chip-warning">
+                        <i class="bi bi-exclamation-triangle"></i>[[ lastScanResult.unrenamed_count ]] 未重命名
                       </span>
-                      <code class="text-truncate">[[ result.pattern ]]</code>
-                    </button>
-                  </h2>
-                  <div :id="'debugResultCollapse' + index" class="accordion-collapse collapse"
-                    :class="{ 'show': result.matched }" data-bs-parent="#debugResultsAccordion">
-                    <div class="accordion-body">
-                      <div v-if="result.error" class="alert alert-danger py-2">
-                        <i class="bi bi-exclamation-triangle me-2"></i> [[ result.error ]]
-                      </div>
+                      <button v-if="lastScanResult.unrenamed_count > 0" type="button" class="btn btn-soft btn-sm"
+                        @click="showUnrenamedFiles(lastScanResult.unrenamed_files)">
+                        <i class="bi bi-eye"></i>查看
+                      </button>
+                    </div>
+                  </template>
+                </div>
+              </div>
 
-                      <div v-if="result.matched" class="debug-match-details">
-                        <div class="mb-3">
-                          <span class="fw-medium me-2">完整匹配:</span>
-                          <code class="bg-light p-2 rounded">[[ result.fullMatch ]]</code>
+              <!-- 上一次有效扫描 -->
+              <div class="panel">
+                <div class="panel-head">
+                  <div class="ttl"><i class="bi bi-patch-check"></i><span>上一次有效扫描</span></div>
+                </div>
+                <div class="panel-body">
+                  <div v-if="!lastEffectScanResult" class="empty"><i class="bi bi-clock-history"></i><p>暂无扫描结果</p>
+                  </div>
+                  <template v-else>
+                    <div class="result-banner" :class="lastEffectScanResult.status === 'error' ? 'err' : 'ok'">
+                      <i class="ic bi"
+                        :class="lastEffectScanResult.status === 'error' ? 'bi-x-circle' : 'bi-check-circle'"></i>
+                      <div>
+                        <h4>[[ lastEffectScanResult.status === 'error' ? '扫描失败' : (lastEffectScanResult.scan_type ===
+                          'rollback' ? '回滚完成' : '扫描完成') ]]</h4>
+                        <div class="result-rows">
+                          <span><b>时间</b> [[ formatDate(lastEffectScanResult.timestamp) ]]</span>
+                          <span v-if="lastEffectScanResult.status !== 'error'"><b>处理文件</b> [[ lastEffectScanResult.processed ]]</span>
+                          <span v-else><b>错误</b> [[ lastEffectScanResult.message ]]</span>
                         </div>
-                        <div v-if="result.groups.length > 0">
-                          <div class="fw-medium mb-2">捕获组:</div>
-                          <div v-for="(group, gIndex) in result.groups" :key="gIndex"
-                            class="debug-group-item ps-3 mb-2">
-                            <span class="text-muted me-2" v-if="result.groups.length==2 &&gIndex==0">季度:</span>
-                            <span class="text-muted me-2" v-if="result.groups.length==2 &&gIndex==1">集数:</span>
-                            <span class="text-muted me-2" v-if="result.groups.length==1">集数:</span>
-                            <code class="bg-light p-1 rounded">[[ group ]]</code>
+                      </div>
+                    </div>
+                    <div v-if="lastEffectScanResult.status !== 'error'" class="statline">
+                      <span>视频<b>[[ lastEffectScanResult.renamed || 0 ]]</b></span>
+                      <span>字幕<b>[[ lastEffectScanResult.renamed_subtitle || 0 ]]</b></span>
+                      <span>音频<b>[[ lastEffectScanResult.renamed_audio || 0 ]]</b></span>
+                      <span>图片<b>[[ lastEffectScanResult.renamed_picture || 0 ]]</b></span>
+                      <span>NFO<b>[[ lastEffectScanResult.deleted_nfo || 0 ]]</b></span>
+                      <span v-if="lastEffectScanResult.unrenamed_count > 0" class="chip chip-warning">
+                        <i class="bi bi-exclamation-triangle"></i>[[ lastEffectScanResult.unrenamed_count ]] 未重命名
+                      </span>
+                      <button v-if="lastEffectScanResult.unrenamed_count > 0" type="button" class="btn btn-soft btn-sm"
+                        @click="showUnrenamedFiles(lastEffectScanResult.unrenamed_files)">
+                        <i class="bi bi-eye"></i>查看
+                      </button>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 扫描历史 -->
+          <section v-show="activeTab === 'history'">
+            <div class="panel">
+              <div class="panel-head">
+                <div class="ttl"><i class="bi bi-clock-history"></i><span>执行记录</span></div>
+                <div class="tools">
+                  <button type="button" class="btn btn-ghost btn-sm" @click="toggleFilter">
+                    <i class="bi" :class="showFilteredOnly ? 'bi-list' : 'bi-funnel'"></i>
+                    [[ showFilteredOnly ? '显示全部' : '仅显示有效操作' ]]
+                  </button>
+                  <button type="button" class="btn btn-ghost btn-sm" @click="loadHistory">
+                    <i class="bi bi-arrow-clockwise"></i>刷新
+                  </button>
+                </div>
+              </div>
+              <div class="panel-body">
+                <div v-if="historyLoading" class="loading-box">
+                  <span class="spinner spinner-brand"></span><span>加载中…</span>
+                </div>
+                <div v-else-if="history.length === 0" class="empty">
+                  <i class="bi" :class="showFilteredOnly ? 'bi-search' : 'bi-inbox'"></i>
+                  <p>[[ showFilteredOnly ? '暂无有效操作记录' : '暂无扫描历史' ]]</p>
+                  <p v-if="showFilteredOnly" class="muted">可切换为显示全部记录</p>
+                </div>
+                <div v-else class="history-grid">
+                  <article v-for="(record, index) in history" :key="index" class="history-card"
+                    :class="record.status === 'error' ? 'err' : 'ok'">
+                    <div class="hcard-head">
+                      <div class="hcard-title">
+                        <i class="bi"
+                          :class="record.status === 'error' ? 'bi-x-circle text-danger' : 'bi-check-circle text-success'"></i>
+                        <span>[[ record.scan_type === 'rollback' ? '回滚' : '扫描' ]] #[[ history.length - index ]]</span>
+                      </div>
+                      <span class="chip chip-outline"><i class="bi bi-calendar3"></i>[[ formatDate(record.timestamp) ]]</span>
+                    </div>
+                    <div class="hcard-body">
+                      <template v-if="record.status !== 'error'">
+                        <div class="target-path">[[ record.target ]]</div>
+                        <div class="metric-grid mt-12">
+                          <div class="metric">
+                            <div class="n">[[ record.processed ]]</div>
+                            <div class="t">处理文件</div>
+                          </div>
+                          <div class="metric">
+                            <div class="n">[[ record.renamed || 0 ]]</div>
+                            <div class="t">重命名视频</div>
                           </div>
                         </div>
+                        <div class="detail-grid">
+                          <div class="detail-cell"><i class="bi" :class="getTypeIcon('subtitle_rename')"></i><span>[[ record.renamed_subtitle || 0 ]] 字幕</span></div>
+                          <div class="detail-cell"><i class="bi" :class="getTypeIcon('audio_rename')"></i><span>[[ record.renamed_audio || 0 ]] 音频</span></div>
+                          <div class="detail-cell"><i class="bi" :class="getTypeIcon('picture_rename')"></i><span>[[ record.renamed_picture || 0 ]] 图片</span></div>
+                          <div class="detail-cell"><i class="bi" :class="getTypeIcon('nfo_delete')"></i><span>[[ record.deleted_nfo || 0 ]] NFO</span></div>
+                        </div>
+                        <div v-if="record.unrenamed_count > 0" class="result-extra">
+                          <span class="chip chip-warning"><i class="bi bi-exclamation-triangle"></i>[[ record.unrenamed_count ]] 个未重命名</span>
+                          <button type="button" class="btn btn-ghost btn-sm" @click="showUnrenamedFiles(record.unrenamed_files)">
+                            <i class="bi bi-eye"></i>查看详情
+                          </button>
+                        </div>
+                      </template>
+                      <div v-else class="note note-danger">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        <span><b>错误：</b>[[ record.message ]]</span>
                       </div>
                     </div>
+                  </article>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 变更记录 -->
+          <section v-show="activeTab === 'records'">
+            <div class="panel">
+              <div class="panel-head">
+                <div class="ttl">
+                  <i class="bi bi-list-ul"></i>
+                  <span v-if="selectedShow.media_type">[[ selectedShow.media_type ]] · [[ selectedShow.show_name ]]</span>
+                  <span v-else>全部节目</span>
+                </div>
+                <div class="tools">
+                  <button v-if="selectedShow.media_type" type="button" class="btn btn-ghost btn-sm" @click="goBackToShows">
+                    <i class="bi bi-arrow-left"></i>返回列表
+                  </button>
+                  <button type="button" class="btn btn-ghost btn-sm" @click="loadChangeRecords">
+                    <i class="bi bi-arrow-clockwise"></i>刷新
+                  </button>
+                </div>
+              </div>
+              <div class="panel-body">
+                <div v-if="recordsLoading" class="loading-box">
+                  <span class="spinner spinner-brand"></span><span>加载中…</span>
+                </div>
+
+                <!-- 节目列表 -->
+                <template v-else-if="!selectedShow.media_type">
+                  <div v-if="showsChangeList.length === 0" class="empty"><i class="bi bi-inbox"></i><p>暂无变更记录</p></div>
+                  <template v-else>
+                    <div class="field-affix mb-16">
+                      <i class="bi bi-search"></i>
+                      <input type="text" class="input" placeholder="搜索节目名称或类型…" v-model="showSearchQuery"
+                        @input="filterShows" />
+                      <button v-if="showSearchQuery" type="button" class="btn btn-ghost btn-sm" @click="clearSearch">
+                        <i class="bi bi-x-lg"></i>
+                      </button>
+                    </div>
+                    <div v-if="filteredShowsChangeList.length === 0" class="empty">
+                      <i class="bi bi-search"></i><p>未找到匹配的节目</p>
+                    </div>
+                    <div v-else class="show-list">
+                      <div v-for="show in filteredShowsChangeList" :key="show.show_name" class="show-card"
+                        @click="selectShow(show.media_type, show.show_name)">
+                        <div class="show-icon"><i class="bi bi-collection-play"></i></div>
+                        <div class="show-info">
+                          <div class="show-name">[[ show.media_type ]] · [[ show.show_name ]]</div>
+                          <div class="show-meta">
+                            <span v-if="show.ai" class="chip chip-ai"><i class="bi bi-stars"></i>AI</span>
+                            <span class="chip chip-primary">[[ show.record_count ]] 条记录</span>
+                            <span v-for="type in show.types" :key="type" class="chip chip-outline">[[ getTypeLabel(type) ]]</span>
+                          </div>
+                        </div>
+                        <div class="show-side">
+                          <div>最后更新</div>
+                          <div>[[ formatDate(show.latest_timestamp) ]]</div>
+                          <i class="bi bi-chevron-right chev"></i>
+                        </div>
+                      </div>
+                    </div>
+                  </template>
+                </template>
+
+                <!-- 节目明细 -->
+                <template v-else>
+                  <div v-if="selectedShowRecords.length === 0" class="empty"><i class="bi bi-inbox"></i><p>该节目暂无变更记录</p></div>
+                  <template v-else>
+                    <div class="stat-tiles">
+                      <div v-for="(count, type) in recordTypeStats" :key="type" class="stat-tile">
+                        <div class="i"><i :class="getTypeIcon(type)"></i></div>
+                        <div class="n">[[ count ]]</div>
+                        <div class="t">[[ getTypeLabel(type) ]]</div>
+                      </div>
+                    </div>
+
+                    <div class="toolbar mt-20">
+                      <span class="muted">分组</span>
+                      <div class="segment">
+                        <button type="button" :class="{ active: groupBy === 'type' }" @click="setGroupBy('type')">
+                          <i class="bi bi-tags"></i> 按类型
+                        </button>
+                        <button type="button" :class="{ active: groupBy === 'season' }" @click="setGroupBy('season')">
+                          <i class="bi bi-collection"></i> 按季度
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="toolbar mt-12">
+                      <span class="muted">筛选</span>
+                      <div class="filter-row">
+                        <button type="button" class="filter-chip" :class="{ active: selectedTypeFilter === 'all' }"
+                          @click="setTypeFilter('all')">全部 ([[ selectedShowRecords.length ]])</button>
+                        <template v-if="groupBy === 'type'">
+                          <button v-for="(count, type) in recordTypeStats" :key="type" type="button" class="filter-chip"
+                            :class="{ active: selectedTypeFilter === type }" @click="setTypeFilter(type)">
+                            [[ getTypeLabel(type) ]] ([[ count ]])
+                          </button>
+                        </template>
+                        <template v-else>
+                          <button v-for="(count, season) in seasonStats" :key="season" type="button" class="filter-chip"
+                            :class="{ active: selectedTypeFilter === season }" @click="setTypeFilter(season)">
+                            [[ season ]] ([[ count ]])
+                          </button>
+                        </template>
+                      </div>
+                      <span class="muted">显示 [[ filteredRecords.length ]] 条</span>
+                    </div>
+
+                    <!-- 分组展示 -->
+                    <div v-if="selectedTypeFilter === 'all'">
+                      <div v-for="(records, groupKey) in groupedRecords" :key="groupKey" class="group">
+                        <div class="group-head">
+                          <i :class="groupBy === 'type' ? getTypeIcon(groupKey) : 'bi-folder'"></i>
+                          <span v-if="groupBy === 'type'">[[ getTypeLabel(groupKey) ]]</span>
+                          <span v-else-if="records.length > 0" class="copyable"
+                            @click="copyText(records[0].season_relative_path)"
+                            :title="'复制路径：' + records[0].season_relative_path">[[ groupKey ]]</span>
+                          <span v-else>[[ groupKey ]]</span>
+                          <span class="cnt">[[ records.length ]]</span>
+                        </div>
+                        <div class="group-body">
+                          <article v-for="(record, index) in records" :key="index" class="record-card"
+                            :class="{ failed: record.status !== 'success' }">
+                            <div class="rc-head">
+                              <div class="rc-title">
+                                <template v-if="record.rollback">
+                                  <i class="bi bi-arrow-counterclockwise text-warning"></i>
+                                  <span class="chip chip-warning">已回滚</span>
+                                </template>
+                                <i v-else class="bi"
+                                  :class="record.status === 'success' ? 'bi-check-circle text-success' : 'bi-x-circle text-danger'"></i>
+                                <span v-if="record.source === 'ai'" class="chip chip-ai"><i class="bi bi-stars"></i>AI</span>
+                                <span v-if="groupBy === 'season'">[[ getTypeLabel(record.type) ]] · </span>
+                                <span class="copyable" @click.stop="copyText(record.season_relative_path)"
+                                  :title="'复制路径：' + record.season_relative_path">[[ record.season_name ]]</span>
+                              </div>
+                              <span class="rc-time">[[ formatDate(record.timestamp) ]]</span>
+                            </div>
+                            <div class="file-lines">
+                              <div v-if="record.type === 'nfo_delete'" class="file-line">
+                                <span class="k">删除文件</span><code>[[ record.original ]]</code>
+                              </div>
+                              <template v-else>
+                                <div class="file-line">
+                                  <span class="k">原文件</span>
+                                  <code v-if="record.rollback">[[ record.new ]]</code>
+                                  <code v-else>[[ record.original ]]</code>
+                                </div>
+                                <div class="file-line">
+                                  <span class="k">新文件</span>
+                                  <code v-if="record.rollback">[[ record.original ]]</code>
+                                  <code v-else>[[ record.new ]]</code>
+                                </div>
+                                <div class="file-line">
+                                  <span class="k">路径</span>
+                                  <code class="copy" @click.stop="copyText(record.relative_path)"
+                                    :title="'复制路径：' + record.relative_path">[[ record.relative_path ]]</code>
+                                </div>
+                              </template>
+                            </div>
+                            <p v-if="record.error" class="rc-error"><b>错误：</b>[[ record.error ]]</p>
+                          </article>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- 筛选结果 -->
+                    <div v-else class="group-body mt-16">
+                      <article v-for="(record, index) in filteredRecords" :key="index" class="record-card"
+                        :class="{ failed: record.status !== 'success' }">
+                        <div class="rc-head">
+                          <div class="rc-title">
+                            <template v-if="record.rollback">
+                              <i class="bi bi-arrow-counterclockwise text-warning"></i>
+                              <span class="chip chip-warning">已回滚</span>
+                            </template>
+                            <i v-else class="bi"
+                              :class="record.status === 'success' ? 'bi-check-circle text-success' : 'bi-x-circle text-danger'"></i>
+                            <span v-if="record.source === 'ai'" class="chip chip-ai"><i class="bi bi-stars"></i>AI</span>
+                            <span class="copyable" @click.stop="copyText(record.season_relative_path)"
+                              :title="'复制路径：' + record.season_relative_path">[[ record.season_name ]]</span>
+                          </div>
+                          <span class="rc-time">[[ formatDate(record.timestamp) ]]</span>
+                        </div>
+                        <div class="file-lines">
+                          <div v-if="record.type === 'nfo_delete'" class="file-line">
+                            <span class="k">删除文件</span><code>[[ record.original ]]</code>
+                          </div>
+                          <template v-else>
+                            <div class="file-line">
+                              <span class="k">原文件</span>
+                              <code v-if="record.rollback">[[ record.new ]]</code>
+                              <code v-else>[[ record.original ]]</code>
+                            </div>
+                            <div class="file-line">
+                              <span class="k">新文件</span>
+                              <code v-if="record.rollback">[[ record.original ]]</code>
+                              <code v-else>[[ record.new ]]</code>
+                            </div>
+                          </template>
+                        </div>
+                        <p v-if="record.error" class="rc-error"><b>错误：</b>[[ record.error ]]</p>
+                      </article>
+                    </div>
+                  </template>
+                </template>
+              </div>
+            </div>
+          </section>
+
+          <!-- 日志查看 -->
+          <section v-show="activeTab === 'logs'">
+            <div class="panel">
+              <div class="panel-head">
+                <div class="ttl"><i class="bi bi-file-text"></i><span>日志文件</span></div>
+                <div class="tools">
+                  <button type="button" class="btn btn-ghost btn-sm" @click="loadLogFiles">
+                    <i class="bi bi-arrow-clockwise"></i>刷新
+                  </button>
+                </div>
+              </div>
+              <div class="panel-body">
+                <div class="log-layout">
+                  <div>
+                    <div v-if="logsLoading" class="loading-box"><span class="spinner spinner-brand"></span></div>
+                    <div v-else-if="logFiles.length === 0" class="empty"><i class="bi bi-inbox"></i><p>暂无日志文件</p></div>
+                    <div v-else class="log-list">
+                      <button v-for="log in logFiles" :key="log.name" type="button" class="log-item"
+                        :class="{ active: selectedLogFile === log.name }" @click="loadLogContent(log.name)">
+                        <div class="li-top">
+                          <span class="li-name">[[ log.name ]]</span>
+                          <span class="li-size">[[ (log.size / 1024).toFixed(1) ]] KB</span>
+                        </div>
+                        <div class="li-time">[[ formatDate(log.modified) ]]</div>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="log-viewer">
+                    <div v-if="logContentLoading" class="loading-box">
+                      <span class="spinner"></span><span>加载中…</span>
+                    </div>
+                    <div v-else-if="!selectedLogFile" class="loading-box">
+                      <i class="bi bi-arrow-left"></i><span>请选择左侧日志文件查看内容</span>
+                    </div>
+                    <div v-else-if="logContentError" class="note note-danger">
+                      <i class="bi bi-exclamation-circle"></i><span>[[ logContentError ]]</span>
+                    </div>
+                    <pre v-else>[[ logContent ]]</pre>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
+          </section>
 
-          <div class="modal-footer">
-            <button class="btn btn-secondary" @click="closeRegexDebugModal">关闭</button>
+        </main>
+    </div>
+
+    <!-- 通用确认框 -->
+    <div v-if="showModal" class="modal">
+      <div class="modal-scrim" @click="closeModal"></div>
+      <div class="modal-box modal-sm">
+        <div class="modal-body">
+          <div class="confirm" :class="modalType">
+            <div class="ci"><i class="bi" :class="modalIcon"></i></div>
+            <div>
+              <h3>[[ modalTitle ]]</h3>
+              <p>[[ modalContent ]]</p>
+            </div>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button v-if="hasCancel" type="button" class="btn btn-ghost" @click="closeModal">取消</button>
+          <button type="button" class="btn btn-primary" @click="confirmAction">确定</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 扫描间隔 -->
+    <transition name="fade">
+      <div v-if="showScanIntervalModal" class="modal">
+        <div class="modal-scrim" @click="showScanIntervalModal = false"></div>
+        <div class="modal-box modal-sm">
+          <div class="modal-head">
+            <h3><i class="bi bi-clock-history"></i>扫描间隔配置</h3>
+            <div class="tools">
+              <button type="button" class="btn btn-ghost btn-icon" @click="showScanIntervalModal = false">
+                <i class="bi bi-x-lg"></i>
+              </button>
+            </div>
+          </div>
+          <div class="modal-body">
+            <label class="label">扫描间隔（秒）</label>
+            <input type="number" class="input" v-model.number="scanInterval" min="20" max="86400" placeholder="60 - 86400" />
+            <div class="hint">当前设置：[[ formatInterval(scanInterval) ]]</div>
+            <div v-if="scanIntervalError" class="note note-danger mt-12">
+              <i class="bi bi-exclamation-circle"></i><span>[[ scanIntervalError ]]</span>
+            </div>
+          </div>
+          <div class="modal-foot">
+            <button type="button" class="btn btn-ghost" @click="showScanIntervalModal = false">取消</button>
+            <button type="button" class="btn btn-primary" @click="updateScanInterval" :disabled="scanIntervalLoading">
+              <span v-if="scanIntervalLoading" class="spinner"></span>
+              <i v-else class="bi bi-check-lg"></i>保存
+            </button>
           </div>
         </div>
       </div>
     </transition>
+
+    <!-- 指定扫描 -->
+    <transition name="fade">
+      <div v-if="showSubPathModal" class="modal">
+        <div class="modal-scrim" @click="closeSubPathModal"></div>
+        <div class="modal-box modal-sm">
+          <div class="modal-head">
+            <h3><i class="bi bi-folder2-open"></i>指定路径扫描</h3>
+            <div class="tools">
+              <button type="button" class="btn btn-ghost btn-icon" @click="closeSubPathModal">
+                <i class="bi bi-x-lg"></i>
+              </button>
+            </div>
+          </div>
+          <div class="modal-body">
+            <label class="label">路径</label>
+            <input type="text" class="input" v-model="subPath" placeholder="例如：Anime/葬送的芙莉莲/Season 01"
+              autocomplete="off" />
+            <div class="hint">相对于媒体根目录的子路径</div>
+          </div>
+          <div class="modal-foot">
+            <button type="button" class="btn btn-ghost" @click="closeSubPathModal">取消</button>
+            <button type="button" class="btn btn-primary" @click="performSubScan" :disabled="subScanLoading">
+              <span v-if="subScanLoading" class="spinner"></span>
+              <i v-else class="bi bi-search"></i>扫描
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- 指定还原 -->
+    <transition name="fade">
+      <div v-if="showSubPathRollbackModal" class="modal">
+        <div class="modal-scrim" @click="closeSubPathRollbackModal"></div>
+        <div class="modal-box modal-sm">
+          <div class="modal-head">
+            <h3><i class="bi bi-arrow-counterclockwise"></i>指定路径还原</h3>
+            <div class="tools">
+              <button type="button" class="btn btn-ghost btn-icon" @click="closeSubPathRollbackModal">
+                <i class="bi bi-x-lg"></i>
+              </button>
+            </div>
+          </div>
+          <div class="modal-body">
+            <label class="label">季度 / 文件 路径</label>
+            <input type="text" class="input" v-model="subPath" placeholder="例如：Anime/葬送的芙莉莲/Season 01"
+              autocomplete="off" />
+            <div class="hint">可在变更记录页点击路径复制</div>
+          </div>
+          <div class="modal-foot">
+            <button type="button" class="btn btn-ghost" @click="closeSubPathRollbackModal">取消</button>
+            <button type="button" class="btn btn-warning" @click="performSubRollBack" :disabled="subScanLoading">
+              <span v-if="subScanLoading" class="spinner"></span>
+              <i v-else class="bi bi-arrow-counterclockwise"></i>回滚
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- 未重命名文件 -->
+    <transition name="fade">
+      <div v-if="showUnrenamedModal" class="modal">
+        <div class="modal-scrim" @click="closeUnrenamedModal"></div>
+        <div class="modal-box modal-lg">
+          <div class="modal-head">
+            <h3><i class="bi bi-exclamation-triangle text-warning"></i>未重命名文件</h3>
+            <div class="tools">
+              <button type="button" class="btn btn-ghost btn-icon" @click="closeUnrenamedModal">
+                <i class="bi bi-x-lg"></i>
+              </button>
+            </div>
+          </div>
+          <div class="modal-body">
+            <div v-if="unrenamedFiles.length === 0" class="empty">
+              <i class="bi bi-check-circle"></i><p>暂无未重命名文件</p>
+            </div>
+            <template v-else>
+              <div class="note note-info mb-16">
+                <i class="bi bi-info-circle"></i>
+                <span>共 <b>[[ unrenamedFiles.length ]]</b> 个文件未能重命名，可加入白名单跳过处理或手动重命名。</span>
+              </div>
+              <div class="row-list">
+                <div v-for="(file, index) in unrenamedFiles" :key="index" class="row-item">
+                  <div class="ri-main">
+                    <div class="ri-name"><i class="bi bi-file-earmark"></i> [[ file.file_name ]]</div>
+                    <div class="ri-sub"><i class="bi bi-folder"></i> [[ file.file_directory ]]</div>
+                    <div v-if="file.isRenaming" class="rename-box">
+                      <input type="text" class="input" :class="{ invalid: file.renameError }"
+                        v-model="file.newFileName" :id="'rename-input-' + index"
+                        @keyup.enter="confirmRename(file, index)" @keyup.esc="cancelRename(file, index)"
+                        placeholder="输入新文件名" />
+                      <button type="button" class="btn btn-success btn-icon" @click="confirmRename(file, index)"
+                        :disabled="renameLoading || !file.newFileName || file.newFileName.trim() === ''">
+                        <span v-if="renameLoading && file.isSubmitting" class="spinner"></span>
+                        <i v-else class="bi bi-check-lg"></i>
+                      </button>
+                      <button type="button" class="btn btn-ghost btn-icon" @click="cancelRename(file, index)"
+                        :disabled="renameLoading && file.isSubmitting">
+                        <i class="bi bi-x-lg"></i>
+                      </button>
+                    </div>
+                    <div v-if="file.renameError" class="rc-error">[[ file.renameError ]]</div>
+                  </div>
+                  <div class="ri-actions">
+                    <button v-if="!file.isRenaming" type="button" class="btn btn-ghost btn-sm"
+                      @click="startRename(file, index)" :disabled="whitelistLoading || renameLoading">
+                      <i class="bi bi-pencil"></i>重命名
+                    </button>
+                    <button type="button" class="btn btn-soft btn-sm" @click="addToWhitelist(file.path)"
+                      :disabled="whitelistLoading || renameLoading || file.isRenaming">
+                      <span v-if="whitelistLoading" class="spinner"></span>
+                      <i v-else class="bi bi-plus-lg"></i>白名单
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+          <div class="modal-foot">
+            <button type="button" class="btn btn-ghost" @click="closeUnrenamedModal">关闭</button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- 白名单 -->
+    <transition name="fade">
+      <div v-if="showWhitelistModal" class="modal">
+        <div class="modal-scrim" @click="closeWhitelistModal"></div>
+        <div class="modal-box modal-lg">
+          <div class="modal-head">
+            <h3><i class="bi bi-shield-check"></i>白名单管理</h3>
+            <div class="tools">
+              <button type="button" class="btn btn-ghost btn-icon" @click="closeWhitelistModal">
+                <i class="bi bi-x-lg"></i>
+              </button>
+            </div>
+          </div>
+          <div class="modal-body">
+            <label class="label">添加路径</label>
+            <div class="toolbar">
+              <div class="field-affix grow">
+                <i class="bi" :class="newWhitelistType === 'directory' ? 'bi-folder' : 'bi-file-earmark'"></i>
+                <input type="text" class="input" v-model="newWhitelistPath" placeholder="文件或目录路径…"
+                  @keyup.enter="addNewWhitelist" />
+              </div>
+              <div class="segment">
+                <button type="button" :class="{ active: newWhitelistType === 'file' }" @click="newWhitelistType = 'file'">
+                  <i class="bi bi-file-earmark"></i> 文件
+                </button>
+                <button type="button" :class="{ active: newWhitelistType === 'directory' }"
+                  @click="newWhitelistType = 'directory'">
+                  <i class="bi bi-folder"></i> 目录
+                </button>
+              </div>
+              <button type="button" class="btn btn-primary" @click="addNewWhitelist"
+                :disabled="!newWhitelistPath.trim()">
+                <i class="bi bi-plus-lg"></i>添加
+              </button>
+            </div>
+
+            <div class="toolbar mt-16">
+              <span class="muted">共 <b>[[ whitelistFiles.length + newWhitelistItems.length ]]</b> 个项目</span>
+              <span v-if="newWhitelistItems.length > 0" class="chip chip-success">新增 [[ newWhitelistItems.length ]] 个待提交</span>
+            </div>
+
+            <div v-if="whitelistFiles.length === 0 && newWhitelistItems.length === 0" class="empty">
+              <i class="bi bi-shield"></i><p>暂无白名单项目</p>
+            </div>
+            <div v-else class="row-list mt-12">
+              <div v-for="(item, index) in newWhitelistItems" :key="'new-' + index" class="row-item new">
+                <div class="ri-main">
+                  <div class="ri-name">
+                    <i class="bi" :class="item.type === 'directory' ? 'bi-folder-fill' : 'bi-file-earmark'"></i>
+                    [[ item.file_name ]]
+                    <span class="chip chip-success">新增</span>
+                    <span class="chip chip-outline">[[ item.type === 'directory' ? '目录' : '文件' ]]</span>
+                  </div>
+                  <div class="ri-sub"><i class="bi bi-folder"></i> [[ item.file_directory || '根目录' ]]</div>
+                </div>
+                <div class="ri-actions">
+                  <button type="button" class="btn btn-ghost btn-sm" @click="removeNewWhitelistItem(index)">
+                    <i class="bi bi-trash"></i>移除
+                  </button>
+                </div>
+              </div>
+
+              <div v-for="(file, index) in whitelistFiles" :key="'existing-' + index" class="row-item info">
+                <div class="ri-main">
+                  <div class="ri-name">
+                    <i class="bi" :class="file.type === 'directory' ? 'bi-folder-fill' : 'bi-file-earmark'"></i>
+                    [[ file.file_name || file.path.split('/').pop() ]]
+                  </div>
+                  <div class="ri-sub">
+                    <i class="bi bi-folder"></i>
+                    [[ file.file_directory || (file.path.includes('/') ? file.path.substring(0, file.path.lastIndexOf('/')) : '根目录') ]]
+                  </div>
+                </div>
+                <div class="ri-actions">
+                  <button type="button" class="btn btn-ghost btn-sm" @click="deleteFromWhitelist(file.path)"
+                    :disabled="deleteFromWhitelistLoading">
+                    <i class="bi bi-trash"></i>移出
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-foot">
+            <button type="button" class="btn btn-ghost" @click="closeWhitelistModal">关闭</button>
+            <button v-if="newWhitelistItems.length > 0" type="button" class="btn btn-primary"
+              @click="submitNewWhitelistItems" :disabled="submitWhitelistLoading">
+              <span v-if="submitWhitelistLoading" class="spinner"></span>
+              <i v-else class="bi bi-check-lg"></i>提交新增（[[ newWhitelistItems.length ]]）
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- 正则配置 -->
+    <transition name="fade">
+      <div v-if="showRegexModal" class="modal">
+        <div class="modal-scrim" @click="closeRegexModal"></div>
+        <div class="modal-box modal-xl">
+          <div class="modal-head">
+            <h3><i class="bi bi-sliders"></i>正则表达式配置</h3>
+            <div class="tools">
+              <button type="button" class="btn btn-ghost btn-sm" @click="openRegexDebugModal">
+                <i class="bi bi-bug"></i>调试
+              </button>
+              <button type="button" class="btn btn-ghost btn-sm" @click="triggerImportFile">
+                <i class="bi bi-upload"></i>导入
+              </button>
+              <input ref="importFileInput" type="file" accept=".json" @change="handleImportFile" style="display: none" />
+              <button type="button" class="btn btn-ghost btn-icon" @click="closeRegexModal">
+                <i class="bi bi-x-lg"></i>
+              </button>
+            </div>
+          </div>
+          <div class="modal-body">
+            <div v-if="regexLoading" class="loading-box"><span class="spinner spinner-brand"></span><span>加载中…</span></div>
+            <div v-else>
+              <div class="regex-grid">
+                <div class="regex-col">
+                  <div class="regex-col-head">
+                    <h4><i class="bi bi-123"></i>集数模式</h4>
+                    <button type="button" class="btn btn-soft btn-sm" @click="addRegexItem('episode_only')">
+                      <i class="bi bi-plus-lg"></i>添加
+                    </button>
+                  </div>
+                  <p class="desc">识别仅包含集数的文件名格式，如 第01集</p>
+                  <div class="regex-list">
+                    <div v-for="(pattern, index) in regexPatterns.episode_only" :key="index" class="regex-row">
+                      <input type="text" class="input" v-model="regexPatterns.episode_only[index]"
+                        placeholder="例如：第(\d{1,3})[集话]" />
+                      <button type="button" class="btn btn-ghost btn-icon" @click="removeRegexItem('episode_only', index)">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </div>
+                    <div v-if="regexPatterns.episode_only.length === 0" class="empty">
+                      <i class="bi bi-inbox"></i><p>暂无表达式</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="regex-col">
+                  <div class="regex-col-head">
+                    <h4><i class="bi bi-collection"></i>季集模式</h4>
+                    <button type="button" class="btn btn-soft btn-sm" @click="addRegexItem('season_episode')">
+                      <i class="bi bi-plus-lg"></i>添加
+                    </button>
+                  </div>
+                  <p class="desc">识别包含季数与集数的文件名格式，如 S01E01</p>
+                  <div class="regex-list">
+                    <div v-for="(pattern, index) in regexPatterns.season_episode" :key="index" class="regex-row">
+                      <input type="text" class="input" v-model="regexPatterns.season_episode[index]"
+                        placeholder="例如：[Ss](\d{1,2})[Ee](\d{1,3})" />
+                      <button type="button" class="btn btn-ghost btn-icon" @click="removeRegexItem('season_episode', index)">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </div>
+                    <div v-if="regexPatterns.season_episode.length === 0" class="empty">
+                      <i class="bi bi-inbox"></i><p>暂无表达式</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div v-if="regexError" class="note note-danger mt-16">
+                <i class="bi bi-exclamation-circle"></i><span>[[ regexError ]]</span>
+              </div>
+            </div>
+          </div>
+          <div class="modal-foot">
+            <button type="button" class="btn btn-ghost" @click="closeRegexModal">取消</button>
+            <button type="button" class="btn btn-primary" @click="saveRegexPatterns" :disabled="regexSaving || regexLoading">
+              <span v-if="regexSaving" class="spinner"></span>
+              <i v-else class="bi bi-check-lg"></i>[[ regexSaving ? '保存中…' : '保存配置' ]]
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- 正则调试 -->
+    <transition name="fade">
+      <div v-if="showRegexDebugModal" class="modal">
+        <div class="modal-scrim" @click="closeRegexDebugModal"></div>
+        <div class="modal-box modal-lg">
+          <div class="modal-head">
+            <h3><i class="bi bi-bug"></i>正则表达式调试器</h3>
+            <div class="tools">
+              <button type="button" class="btn btn-ghost btn-icon" @click="closeRegexDebugModal">
+                <i class="bi bi-x-lg"></i>
+              </button>
+            </div>
+          </div>
+          <div class="modal-body">
+            <label class="label">测试文件名</label>
+            <div class="toolbar">
+              <div class="field-affix grow">
+                <i class="bi bi-file-earmark-text"></i>
+                <input type="text" class="input" v-model="debugFileName" placeholder="例如：Show.S01E02.1080p.mkv" />
+              </div>
+              <button type="button" class="btn btn-primary" @click="runDebug" :disabled="!debugFileName || debugLoading">
+                <span v-if="debugLoading" class="spinner"></span>
+                <i v-else class="bi bi-play-fill"></i>测试
+              </button>
+            </div>
+            <div class="hint">将测试当前配置中的全部表达式</div>
+
+            <div v-if="debugResults.length > 0" class="mt-16">
+              <div class="toolbar mb-12">
+                <b>测试结果</b>
+                <span class="chip chip-success">匹配 [[ debugResults.filter(r => r.matched).length ]] / [[ debugResults.length ]]</span>
+              </div>
+              <div class="debug-list">
+                <details v-for="(result, index) in debugResults" :key="index" class="debug-item" :open="result.matched">
+                  <summary>
+                    <span class="chip"
+                      :class="result.error ? 'chip-danger' : (result.matched ? 'chip-success' : 'chip-outline')">
+                      [[ result.error || (result.matched ? '匹配' : '未匹配') ]]
+                    </span>
+                    <span class="pat">[[ result.pattern ]]</span>
+                    <i class="bi bi-chevron-down muted"></i>
+                  </summary>
+                  <div class="debug-body">
+                    <div v-if="result.error" class="note note-danger">
+                      <i class="bi bi-exclamation-triangle"></i><span>[[ result.error ]]</span>
+                    </div>
+                    <template v-if="result.matched">
+                      <div><b>完整匹配：</b><code>[[ result.fullMatch ]]</code></div>
+                      <div v-if="result.groups.length > 0" class="grp">
+                        <div class="gl">捕获组</div>
+                        <div v-for="(group, gIndex) in result.groups" :key="gIndex" class="gpair">
+                          <span class="muted" v-if="result.groups.length == 2">[[ gIndex === 0 ? '季度' : '集数' ]]</span>
+                          <span class="muted" v-else>集数</span>
+                          <code>[[ group ]]</code>
+                        </div>
+                      </div>
+                    </template>
+                  </div>
+                </details>
+              </div>
+            </div>
+          </div>
+          <div class="modal-foot">
+            <button type="button" class="btn btn-ghost" @click="closeRegexDebugModal">关闭</button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- 模型供应商 -->
+    <transition name="fade">
+      <div v-if="showProviderModal" class="modal">
+        <div class="modal-scrim" @click="closeProviderConfig"></div>
+        <div class="modal-box modal-lg">
+          <div class="modal-head">
+            <h3><i class="bi bi-hdd-network"></i>模型供应商</h3>
+            <div class="tools">
+              <button type="button" class="btn btn-ghost btn-icon" @click="closeProviderConfig">
+                <i class="bi bi-x-lg"></i>
+              </button>
+            </div>
+          </div>
+          <div class="modal-body">
+            <div class="note note-info">
+              <i class="bi bi-shield-lock"></i>
+              <span>API Key 加密存储。可配置多个供应商并任选其一作为默认。</span>
+            </div>
+
+            <div v-if="aiProviders.length === 0 && !aiProviderEditing" class="empty mt-16">
+              <i class="bi bi-hdd-network"></i>
+              <p>暂无模型供应商</p>
+            </div>
+            <div v-else-if="aiProviders.length > 0" class="row-list mt-16">
+              <div v-for="p in aiProviders" :key="p.id" class="row-item ai-item">
+                <div class="ri-main">
+                  <div class="ri-name">
+                    <i class="bi bi-hdd-network"></i> [[ p.name ]]
+                    <span v-if="p.is_default" class="chip chip-ai">默认</span>
+                    <span v-if="!p.enabled" class="chip chip-outline">已停用</span>
+                  </div>
+                  <div class="ri-sub">
+                    <i class="bi bi-link-45deg"></i> [[ p.base_url ]]
+                    · [[ p.model || '未指定模型' ]]
+                    · Key [[ p.has_key ? p.key_hint : '未设置' ]]
+                  </div>
+                </div>
+                <div class="ri-actions">
+                  <button type="button" class="btn btn-ghost btn-sm" @click="testAiProvider(p)"
+                    :disabled="aiTesting">
+                    <i class="bi bi-plug"></i>测试
+                  </button>
+                  <button v-if="!p.is_default" type="button" class="btn btn-ghost btn-sm"
+                    @click="setDefaultProvider(p)" :disabled="aiSaving">
+                    <i class="bi bi-star"></i>设为默认
+                  </button>
+                  <button type="button" class="btn btn-ghost btn-sm" @click="editAiProvider(p)">
+                    <i class="bi bi-pencil"></i>编辑
+                  </button>
+                  <button type="button" class="btn btn-ghost btn-sm" @click="deleteAiProvider(p)"
+                    :disabled="aiSaving">
+                    <i class="bi bi-trash"></i>删除
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="aiProviderEditing" class="provider-form-card mt-16">
+              <div class="toolbar mb-12">
+                <b>[[ aiProviderForm.id ? '编辑供应商' : '新增供应商' ]]</b>
+              </div>
+              <div class="form-grid">
+                <div>
+                  <label class="label">名称</label>
+                  <input type="text" class="input" v-model="aiProviderForm.name" placeholder="例如：OpenAI" />
+                </div>
+                <div>
+                  <label class="label">模型</label>
+                  <input type="text" class="input" v-model="aiProviderForm.model" placeholder="例如：gpt-4o-mini" />
+                </div>
+                <div class="full">
+                  <label class="label">Base URL</label>
+                  <input type="text" class="input" v-model="aiProviderForm.base_url"
+                    placeholder="https://api.openai.com/v1" />
+                </div>
+                <div class="full">
+                  <label class="label">API Key</label>
+                  <input type="password" class="input" v-model="aiProviderForm.api_key" autocomplete="new-password"
+                    :placeholder="aiProviderForm.id ? '留空则保持原有 Key 不变' : 'sk-...（本地模型可留空）'" />
+                </div>
+              </div>
+              <div class="toolbar mt-12">
+                <label class="check"><input type="checkbox" v-model="aiProviderForm.enabled" /> 启用</label>
+                <label class="check"><input type="checkbox" v-model="aiProviderForm.is_default" /> 设为默认</label>
+              </div>
+              <div class="toolbar mt-16">
+                <button type="button" class="btn btn-ghost" @click="testAiProvider(aiProviderForm)"
+                  :disabled="aiTesting || !aiProviderForm.base_url">
+                  <span v-if="aiTesting" class="spinner"></span>
+                  <i v-else class="bi bi-plug"></i>测试连接
+                </button>
+                <span class="grow"></span>
+                <button type="button" class="btn btn-ghost" @click="resetAiProviderForm">取消</button>
+                <button type="button" class="btn btn-primary" @click="saveAiProvider"
+                  :disabled="aiSaving || !aiProviderForm.name || !aiProviderForm.base_url">
+                  <span v-if="aiSaving" class="spinner"></span>
+                  <i v-else class="bi bi-check-lg"></i>保存
+                </button>
+              </div>
+            </div>
+
+            <div v-if="aiTestResult" class="note mt-12"
+              :class="aiTestResult.ok ? 'note-success' : 'note-danger'">
+              <i class="bi" :class="aiTestResult.ok ? 'bi-check-circle' : 'bi-x-circle'"></i>
+              <span>[[ aiTestResult.message ]]</span>
+            </div>
+          </div>
+          <div class="modal-foot">
+            <button type="button" class="btn btn-ghost" @click="closeProviderConfig">关闭</button>
+            <button v-if="!aiProviderEditing" type="button" class="btn btn-primary" @click="newAiProvider">
+              <i class="bi bi-plus-lg"></i>添加供应商
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- AI 重命名 -->
+    <transition name="fade">
+      <div v-if="showAiModal" class="modal">
+        <div class="modal-scrim" @click="closeAiConfig"></div>
+        <div class="modal-box modal-lg">
+          <div class="modal-head">
+            <h3><i class="bi bi-stars"></i>AI 重命名</h3>
+            <div class="tools">
+              <button type="button" class="btn btn-ghost btn-icon" @click="closeAiConfig">
+                <i class="bi bi-x-lg"></i>
+              </button>
+            </div>
+          </div>
+          <div class="modal-body">
+            <div class="note" :class="aiStatus.configured ? 'note-success' : 'note-warning'">
+              <i class="bi" :class="aiStatus.configured ? 'bi-check-circle' : 'bi-exclamation-triangle'"></i>
+              <span v-if="aiStatus.configured">
+                已配置 [[ aiStatus.provider_count ]] 个模型供应商<template v-if="aiStatus.default_provider">
+                  · 默认 [[ aiStatus.default_provider.name ]]</template>
+              </span>
+              <span v-else>尚未配置模型供应商，请先在「模型供应商」中添加并测试。</span>
+            </div>
+
+            <label class="label mt-16">绑定目录（相对媒体库）</label>
+            <div class="toolbar">
+              <select class="select select-narrow" v-model="newAiProviderId">
+                <option value="">默认供应商</option>
+                <option v-for="p in aiProviders" :key="p.id" :value="p.id">[[ p.name ]]</option>
+              </select>
+              <div class="field-affix grow">
+                <i class="bi bi-folder"></i>
+                <input type="text" class="input" v-model="newAiPath" placeholder="例如：Anime/葬送的芙莉莲"
+                  @keyup.enter="addAiBinding" />
+              </div>
+              <button type="button" class="btn btn-primary" @click="addAiBinding"
+                :disabled="!newAiPath.trim() || aiLoading">
+                <span v-if="aiLoading" class="spinner"></span>
+                <i v-else class="bi bi-plus-lg"></i>绑定
+              </button>
+            </div>
+            <div class="hint">绑定后，该目录下的视频将由 AI 依据文件名与历史记录推断命名，而不是固定正则。</div>
+
+            <div class="toolbar mt-20">
+              <span class="muted">已绑定 <b>[[ aiBindings.length ]]</b> 个目录</span>
+            </div>
+            <div v-if="aiBindings.length === 0" class="empty">
+              <i class="bi bi-stars"></i><p>暂无 AI 绑定目录</p>
+            </div>
+            <div v-else class="row-list mt-12">
+              <div v-for="binding in aiBindings" :key="binding.path" class="row-item ai-item">
+                <div class="ri-main">
+                  <div class="ri-name">
+                    <i class="bi bi-folder-fill"></i>
+                    [[ binding.path ]]
+                    <span class="chip chip-ai"><i class="bi bi-stars"></i>AI</span>
+                  </div>
+                  <div class="ri-sub"><i class="bi bi-cpu"></i> [[ binding.model || providerName(binding.provider_id) ]]</div>
+                </div>
+                <div class="ri-actions">
+                  <button type="button" class="btn btn-ghost btn-sm" @click="removeAiBinding(binding.path)"
+                    :disabled="aiLoading">
+                    <i class="bi bi-trash"></i>解除
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-foot">
+            <button type="button" class="btn btn-ghost" @click="closeAiConfig">关闭</button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- 通知 -->
+    <transition-group name="slide" tag="div" class="toast-wrap">
+      <div v-for="toast in toasts" :key="toast.id" class="toast" :class="toast.type"
+        @click="removeToast(toast.id)">
+        <i class="bi" :class="getToastIcon(toast.type)"></i>
+        <div>
+          <div v-if="toast.title" class="tt">[[ toast.title ]]</div>
+          <div class="tm">[[ toast.message ]]</div>
+        </div>
+        <i class="bi bi-x tx" @click.stop="removeToast(toast.id)"></i>
+        <div class="bar" :style="{ animationDuration: toast.duration + 'ms' }"></div>
+      </div>
+    </transition-group>
+
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
   <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 

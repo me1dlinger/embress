@@ -4,6 +4,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.header import Header
+from html import escape
 from logging_utils import get_logger
 from pathlib import Path
 import logging
@@ -71,7 +72,7 @@ class EmailNotifier:
         if result.get("unrenamed_count", 0) > 0:
             unrenamed_details = "<h3>未重命名文件详情:</h3><ul>"
             for file in result.get("unrenamed_files", []):
-                unrenamed_details += f"<li>{file.get('path')}</li>"
+                unrenamed_details += f"<li>{escape(str(file.get('path')))}</li>"
             unrenamed_details += "</ul>"
 
         html_content = f"""
@@ -152,7 +153,7 @@ class EmailNotifier:
                 <p>自动扫描过程中发生错误：</p>
                 
                 <div class="stat-item"><strong>错误时间:</strong> {result.get("timestamp")}</div>
-                <div class="stat-item"><span class="error">错误信息:</span> {result.get("message")}</div>
+                <div class="stat-item"><span class="error">错误信息:</span> {escape(str(result.get("message")))}</div>
                 
                 <p>请检查系统日志以获取更多详细信息。</p>
             </div>
@@ -173,8 +174,11 @@ class EmailNotifier:
                 message.attach(MIMEText(content, "html", "utf-8"))
             else:
                 message.attach(MIMEText(content, "plain", "utf-8"))
-            server = smtplib.SMTP(self.EMAIL_HOST, self.EMAIL_PORT)
-            server.starttls()
+            if self.EMAIL_PORT == 465:
+                server = smtplib.SMTP_SSL(self.EMAIL_HOST, self.EMAIL_PORT, timeout=20)
+            else:
+                server = smtplib.SMTP(self.EMAIL_HOST, self.EMAIL_PORT, timeout=20)
+                server.starttls()
             server.login(self.EMAIL_USER, self.EMAIL_PASSWORD)
             for recipient in self.EMAIL_RECIPIENTS:
                 if recipient.strip():

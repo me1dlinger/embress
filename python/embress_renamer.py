@@ -9,12 +9,15 @@ import json
 import logging
 import os
 import re
-import time
 import sys
+import threading
+import time
+from contextlib import contextmanager
 
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple, Union
+from ai_renamer import ai_renamer
 from database import config_db
 from logging_utils import get_logger
 
@@ -64,7 +67,9 @@ class WhitelistLoader:
                 if entry.get("type") == "directory":
                     raw = entry["path"].strip().lstrip("/\\")
                     path = (FULL_MEDIA_PATH / raw).resolve()
-                    dir_list.append(path)
+                    # 仅接受位于媒体根目录内的目录，避免越权白名单
+                    if path == FULL_MEDIA_PATH or FULL_MEDIA_PATH in path.parents:
+                        dir_list.append(path)
                 else:
                     file_set.add(str(entry["path"]))
             cls._cache = {"files": file_set, "dirs": dir_list}
@@ -93,17 +98,68 @@ class WhitelistLoader:
 
 
 class RegexLoader:
-    _cache_mtime: float = 0.0
-    _patterns: Dict[str, List[str]] = {}
+    """正则配置缓存：避免每个文件都查询数据库并重复编译"""
+
+    _ttl = 5
+    _lock = threading.Lock()
+    _cache: Dict[str, List[str]] = {}
+    _compiled: Dict[str, List[re.Pattern]] = {}
+    _cache_time = 0.0
 
     @classmethod
     def patterns(cls) -> Dict[str, List[str]]:
-        return config_db.get_regex_patterns()
+        now = time.time()
+        if not cls._cache or now - cls._cache_time > cls._ttl:
+            raw = config_db.get_regex_patterns()
+            compiled: Dict[str, List[re.Pattern]] = {}
+            for p_type, pats in raw.items():
+                bucket = []
+                for pat in pats:
+                    try:
+                        bucket.append(re.compile(pat, re.I))
+                    except re.error:
+                        continue
+                compiled[p_type] = bucket
+            with cls._lock:
+                cls._cache = raw
+                cls._compiled = compiled
+                cls._cache_time = now
+        return cls._cache
+
+    @classmethod
+    def compiled(cls) -> Dict[str, List[re.Pattern]]:
+        cls.patterns()
+        return cls._compiled
+
+    @classmethod
+    def force_reload(cls):
+        with cls._lock:
+            cls._cache = {}
+            cls._compiled = {}
+            cls._cache_time = 0.0
+
+
+class OperationBusy(RuntimeError):
+    """已有扫描/回滚任务在执行"""
+
+
+_OPERATION_LOCK = threading.Lock()
+
+
+@contextmanager
+def _operation_guard():
+    """串行化所有扫描/回滚，避免同一 Renamer 实例的共享状态互相污染"""
+    if not _OPERATION_LOCK.acquire(blocking=False):
+        raise OperationBusy("已有扫描或回滚任务正在执行，请稍后再试")
+    try:
+        yield
+    finally:
+        _OPERATION_LOCK.release()
 
 
 class EmbressRenamer:
     def __init__(self, media_path: str):
-        self.media_path = Path(media_path)
+        self.media_path = Path(media_path).resolve()
         self.logger = self._setup_logger()
         self._pending_change_records: List[Dict] = []
         self._seasons_to_update: Set[Path] = set()
@@ -117,22 +173,30 @@ class EmbressRenamer:
             to_console=True,
         )
 
+    def _safe_join(self, base: Path, sub_path: str) -> Path:
+        """将用户提供的子路径限制在媒体根目录内，阻止目录穿越"""
+        root = base.resolve()
+        target = (root / (sub_path or "")).resolve()
+        if target != root and root not in target.parents:
+            raise ValueError(f"路径越界: {sub_path}")
+        return target
+
     def _extract_episode_info(
         self, filename: str
     ) -> Optional[Tuple[Optional[int], Union[int, float], Optional[Tuple[int, int]]]]:
         """提取集数信息，返回 (季数, 集数, 匹配位置)"""
-        p_cfg = RegexLoader.patterns()
+        p_cfg = RegexLoader.compiled()
 
         # (季,集) 模式
-        for pat in p_cfg.get("season_episode", []):
-            if m := re.search(pat, filename, re.I):
+        for regex in p_cfg.get("season_episode", []):
+            if m := regex.search(filename):
                 season = int(m.group(1))
                 episode = float(m.group(2)) if "." in m.group(2) else int(m.group(2))
                 return season, episode, m.span()
 
         # 仅集数模式
-        for pat in p_cfg.get("episode_only", []):
-            if m := re.search(pat, filename, re.I):
+        for regex in p_cfg.get("episode_only", []):
+            if m := regex.search(filename):
                 episode_str = m.group(1)
                 episode = float(episode_str) if "." in episode_str else int(episode_str)
                 return None, episode, m.span()
@@ -516,9 +580,13 @@ class EmbressRenamer:
             new_records = config_db.get_season_change_records(str(season_dir))
         except Exception as e:
             self.logger.error(f"获取变更记录失败: {e}")
-        rename_record_path.write_text(
-            json.dumps(new_records, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+            return
+        try:
+            rename_record_path.write_text(
+                json.dumps(new_records, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+        except Exception as e:
+            self.logger.error(f"写入 rename_record.json 失败: {e}")
 
     def _season_processed_set(self, season_dir: Path) -> Set[Tuple[str, str]]:
         """从数据库获取已处理的文件集合"""
@@ -589,8 +657,12 @@ class EmbressRenamer:
         return list(latest_map.values())
 
     def scan_and_rollback(self, sub_path: str):
+        with _operation_guard():
+            return self._do_scan_and_rollback(sub_path)
+
+    def _do_scan_and_rollback(self, sub_path: str):
         self.logger.info(f"Start rollback Season: {sub_path}")
-        season_dir = Path(MEDIA_PATH) / sub_path
+        season_dir = self._safe_join(Path(MEDIA_PATH), sub_path)
         rollback_record_path = season_dir / "rollback.json"
         media_type = self._extract_media_type(season_dir)
         if not season_dir.exists():
@@ -780,12 +852,14 @@ class EmbressRenamer:
         return {"result": rollback_result, "code": code}
 
     def rollback_single_file(self, file_path: str):
+        with _operation_guard():
+            return self._do_rollback_single_file(file_path)
+
+    def _do_rollback_single_file(self, file_path: str):
         """回滚单个文件"""
         self.logger.info(f"Start rollback file: {file_path}")
 
-        abs_file_path = Path(file_path)
-        if not abs_file_path.is_absolute():
-            abs_file_path = Path(MEDIA_PATH) / file_path
+        abs_file_path = self._safe_join(Path(MEDIA_PATH), file_path)
 
         if not abs_file_path.exists():
             result = {"success": False, "message": "文件不存在"}
@@ -948,6 +1022,10 @@ class EmbressRenamer:
             return {"result": result, "code": 500}
 
     def scan_and_rename(self, sub_path: Optional[str] = None) -> Dict:
+        with _operation_guard():
+            return self._do_scan_and_rename(sub_path)
+
+    def _do_scan_and_rename(self, sub_path: Optional[str] = None) -> Dict:
         self.current_sub_path = sub_path
         self.logger.info(
             f"Starting media scan and rename process. Target: '{sub_path or 'ALL'}'"
@@ -971,7 +1049,9 @@ class EmbressRenamer:
         }
         finished_statuses = {STATUS_RENAMED, STATUS_WHITELIST, STATUS_SKIP}
         root_path = (
-            self.media_path if sub_path is None else (self.media_path / sub_path)
+            self.media_path
+            if sub_path is None
+            else self._safe_join(self.media_path, sub_path)
         )
         if not root_path.exists():
             msg = f"媒体路径不存在: {root_path}"
@@ -1159,6 +1239,29 @@ class EmbressRenamer:
         season_num_hint = self._get_season_from_path(season_dir)
         season_changes: List[Dict] = []
 
+        ai_binding = ai_renamer.get_binding(season_dir)
+        ai_names: Dict[str, str] = {}
+        if ai_binding:
+            candidates = [
+                f.name
+                for f in season_dir.iterdir()
+                if f.is_file()
+                and f.suffix.lower() in video_exts
+                and (str(f.absolute()), f.name) not in processed_files
+                and not WhitelistLoader.is_whitelisted(str(f.absolute()))
+            ]
+            if candidates:
+                self.logger.info(
+                    "AI 重命名已启用: %s (%d 个候选文件)", season_dir, len(candidates)
+                )
+                ai_names = ai_renamer.propose(
+                    season_dir=season_dir,
+                    show_name=parent_show.name,
+                    media_type=media_type_name,
+                    season_name=season_dir.name,
+                    filenames=candidates,
+                )
+
         for f in season_dir.iterdir():
             abs_path = str(f.absolute())
             if (
@@ -1168,7 +1271,7 @@ class EmbressRenamer:
             ):
                 continue
             file_info, changes, renamed_flag = self._process_episode_file(
-                f, season_num_hint, abs_path
+                f, season_num_hint, abs_path, ai_names.get(f.name)
             )
             processed_files_list.append(file_info)
             season_changes.extend(changes)
@@ -1185,6 +1288,9 @@ class EmbressRenamer:
                 f"Orphan subtitles processed: {len(orphan_changes)} changes."
             )
             if orphan_changes:
+                if ai_binding:
+                    for change in orphan_changes:
+                        change.setdefault("source", "ai")
                 season_changes.extend(orphan_changes)
         if season_changes:
             self._queue_change_records(season_dir, media_type_name, season_changes)
@@ -1215,6 +1321,7 @@ class EmbressRenamer:
         file_path: Path,
         season_num_hint: Optional[int],
         abs_path: str,
+        ai_new_name: Optional[str] = None,
     ) -> Tuple[Dict, List[Dict], bool]:
         if WhitelistLoader.is_whitelisted(abs_path):
             return (
@@ -1222,6 +1329,25 @@ class EmbressRenamer:
                 [],
                 False,
             )
+
+        if ai_new_name and ai_new_name != file_path.name:
+            changes = self._rename_file_and_subtitles(file_path, ai_new_name)
+            for change in changes:
+                change.setdefault("source", "ai")
+            if self._count_success_renames(changes):
+                return (
+                    {
+                        "path": abs_path,
+                        "status": STATUS_RENAMED,
+                        "original_name": file_path.name,
+                        "new_name": ai_new_name,
+                        "source": "ai",
+                    },
+                    changes,
+                    True,
+                )
+            self.logger.warning("AI 改名失败, 回退正则: %s", file_path.name)
+
         file_info = {
             "path": abs_path,
             "status": STATUS_UNPROCESSED,

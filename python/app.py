@@ -5,6 +5,7 @@
  */
 """
 
+import hmac
 import logging
 import os
 from datetime import datetime, timedelta
@@ -16,9 +17,16 @@ from apscheduler.schedulers.base import (  # type: ignore
     STATE_RUNNING,
     STATE_STOPPED,
 )
+from ai_renamer import AI_BASE_URL, AI_MODEL, ai_renamer, normalize_binding_path
+from crypto_utils import decrypt, encrypt, mask
 from database import config_db
 from email_notifier import EmailNotifier
-from embress_renamer import EmbressRenamer, WhitelistLoader
+from embress_renamer import (  # type: ignore
+    EmbressRenamer,
+    OperationBusy,
+    RegexLoader,
+    WhitelistLoader,
+)
 from flask import Flask, jsonify, render_template, request  # type: ignore
 from logging_utils import DailyFileHandler
 
@@ -30,6 +38,25 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 
 MAX_RETRIES = 3
 RETRY_DELAY = 0.5
+
+MEDIA_ROOT = Path(MEDIA_PATH).resolve()
+
+
+def _safe_media_path(raw: str) -> Path:
+    """把用户输入的子路径限制在媒体根目录内，阻止目录穿越"""
+    target = (MEDIA_ROOT / (raw or "")).resolve()
+    if target != MEDIA_ROOT and MEDIA_ROOT not in target.parents:
+        raise ValueError("路径越界")
+    return target
+
+
+def _safe_child(name: str) -> str:
+    """校验纯文件名：不含目录分隔符，且不是 . 或 .."""
+    if not name or name in (".", "..") or "/" in name or "\\" in name:
+        raise ValueError("非法文件名")
+    if os.path.basename(name) != name:
+        raise ValueError("非法文件名")
+    return name
 
 app = Flask(__name__)
 app.logger.propagate = False
@@ -61,7 +88,7 @@ def global_access_key_guard():
         or request.args.get("access_key")
         or (request.get_json(silent=True) or {}).get("access_key")
     )
-    if key != ACCESS_KEY:
+    if not hmac.compare_digest(str(key or ""), ACCESS_KEY):
         app.logger.warning(
             "Unauthorized access: endpoint=%s ip=%s",
             request.endpoint,
@@ -152,6 +179,7 @@ def get_status():
                 STATE_RUNNING: "运行中",
                 STATE_PAUSED: "已暂停",
             }.get(scheduler_state, f"UNKNOWN({scheduler_state})"),
+            "ai_enabled": ai_renamer.is_configured(),
         }
     )
 
@@ -202,6 +230,8 @@ def manual_scan():
         config_db.add_scan_history(result)
         app.logger.info(f"Manual scanning completed: {result}")
         return jsonify({"success": True, "result": result})
+    except OperationBusy as exc:
+        return jsonify({"success": False, "message": str(exc)}), 409
     except Exception as exc:
         app.logger.exception("Manual scanning failed")
         error_result = {
@@ -220,6 +250,10 @@ def scan_directory():
     if not sub_path:
         return jsonify({"success": False, "message": "缺少 sub_path"}), 200
     try:
+        _safe_media_path(sub_path)
+    except ValueError:
+        return jsonify({"success": False, "message": "路径越界"}), 200
+    try:
         app.logger.info(f"Start scan directory: {sub_path}")
         result = renamer.scan_and_rename(sub_path=sub_path)
         app.logger.info(f"Directory scan completed: {result}")
@@ -227,6 +261,8 @@ def scan_directory():
             return jsonify({"success": False, "message": result.get("message")}), 200
         config_db.add_scan_history(result)
         return jsonify({"success": True, "result": result})
+    except OperationBusy as exc:
+        return jsonify({"success": False, "message": str(exc)}), 409
     except Exception as exc:
         app.logger.exception("Directory scan failed")
         return jsonify({"success": False, "message": str(exc)}), 200
@@ -252,9 +288,15 @@ def rename_file():
         )
 
     try:
+        parent = _safe_media_path(file_path)
+        file_name = _safe_child(file_name)
+        new_file_name = _safe_child(new_file_name)
+    except ValueError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 200
 
-        original_file = Path(file_path) / file_name
-        new_file = Path(file_path) / new_file_name
+    try:
+        original_file = parent / file_name
+        new_file = parent / new_file_name
 
         if not original_file.exists():
             return (
@@ -291,21 +333,27 @@ def rollback_season():
     if not sub_path:
         return jsonify({"success": False, "message": "缺少 sub_path"}), 200
 
-    full_path = Path(MEDIA_PATH) / sub_path
+    try:
+        full_path = _safe_media_path(sub_path)
+    except ValueError:
+        return jsonify({"success": False, "message": "路径越界"}), 200
     if not full_path.exists():
         return jsonify({"success": False, "message": f"路径不存在: {sub_path}"}), 200
 
-    if full_path.is_file():
-        app.logger.info(f"Detected file path, start rollback file: {sub_path}")
-        rollback_result = renamer.rollback_single_file(sub_path)
-    elif full_path.is_dir():
-        app.logger.info(f"Start rollback Season: {sub_path}")
-        rollback_result = renamer.scan_and_rollback(sub_path)
-    else:
-        return (
-            jsonify({"success": False, "message": f"路径类型不明确: {sub_path}"}),
-            200,
-        )
+    try:
+        if full_path.is_file():
+            app.logger.info(f"Detected file path, start rollback file: {sub_path}")
+            rollback_result = renamer.rollback_single_file(sub_path)
+        elif full_path.is_dir():
+            app.logger.info(f"Start rollback Season: {sub_path}")
+            rollback_result = renamer.scan_and_rollback(sub_path)
+        else:
+            return (
+                jsonify({"success": False, "message": f"路径类型不明确: {sub_path}"}),
+                200,
+            )
+    except OperationBusy as exc:
+        return jsonify({"success": False, "message": str(exc)}), 409
 
     return jsonify(
         {"success": True, "result": rollback_result.get("result", {})}
@@ -339,6 +387,7 @@ def update_regex_patterns():
         )
     try:
         config_db.update_regex_patterns(payload)
+        RegexLoader.force_reload()
         return jsonify({"success": True, "message": "正则配置已更新"})
     except Exception as exc:
         app.logger.exception("Writing regex configuration failed")
@@ -409,6 +458,178 @@ def update_scan_interval():
             jsonify({"success": False, "message": f"更新扫描间隔失败: {str(e)}"}),
             200,
         )
+
+
+def _provider_public(provider) -> dict:
+    return {
+        "id": provider["id"],
+        "name": provider["name"],
+        "base_url": provider["base_url"],
+        "model": provider["model"],
+        "enabled": provider["enabled"],
+        "is_default": provider["is_default"],
+        "has_key": bool(provider.get("api_key")),
+        "key_hint": mask(provider.get("api_key") or ""),
+        "timestamp": provider.get("timestamp"),
+    }
+
+
+@app.route("/api/ai/status")
+def ai_status():
+    default = config_db.get_default_ai_provider()
+    return jsonify(
+        {
+            "success": True,
+            "configured": ai_renamer.is_configured(),
+            "env_ready": bool(AI_BASE_URL),
+            "base_url": AI_BASE_URL,
+            "model": AI_MODEL,
+            "default_provider": _provider_public(default) if default else None,
+            "provider_count": len(config_db.get_ai_providers()),
+            "bindings": len(config_db.get_ai_bindings()),
+        }
+    )
+
+
+@app.route("/api/ai/providers", methods=["GET"])
+def get_ai_providers():
+    return jsonify(
+        {
+            "success": True,
+            "providers": [_provider_public(p) for p in config_db.get_ai_providers()],
+        }
+    )
+
+
+@app.route("/api/ai/providers", methods=["POST"])
+def save_ai_provider():
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    base_url = (data.get("base_url") or "").strip().rstrip("/")
+    if not name or not base_url:
+        return jsonify({"success": False, "message": "名称与 Base URL 必填"}), 200
+    model = (data.get("model") or "").strip() or None
+    enabled = bool(data.get("enabled", True))
+    is_default = bool(data.get("is_default", False))
+    api_key = data.get("api_key")
+    provider_id = data.get("id")
+
+    try:
+        if provider_id:
+            fields = {
+                "name": name,
+                "base_url": base_url,
+                "model": model,
+                "enabled": enabled,
+                "is_default": is_default,
+            }
+            if api_key is not None and str(api_key).strip() != "":
+                fields["api_key"] = encrypt(str(api_key).strip())
+            config_db.update_ai_provider(int(provider_id), **fields)
+            return jsonify({"success": True, "id": int(provider_id), "message": "已更新"})
+
+        encrypted = encrypt(str(api_key).strip()) if api_key else None
+        new_id = config_db.add_ai_provider(
+            name, base_url, encrypted, model, enabled, is_default
+        )
+        return jsonify({"success": True, "id": new_id, "message": "已添加"})
+    except ValueError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 200
+
+
+@app.route("/api/ai/providers", methods=["DELETE"])
+def delete_ai_provider():
+    data = request.get_json(silent=True) or {}
+    provider_id = data.get("id")
+    if not provider_id:
+        return jsonify({"success": False, "message": "缺少 id"}), 200
+    removed = config_db.remove_ai_provider(int(provider_id))
+    return jsonify(
+        {
+            "success": True,
+            "removed": removed,
+            "message": "已删除" if removed else "未找到该供应商",
+        }
+    )
+
+
+@app.route("/api/ai/providers/test", methods=["POST"])
+def test_ai_provider():
+    data = request.get_json(silent=True) or {}
+    provider_id = data.get("id")
+    base_url = (data.get("base_url") or "").strip().rstrip("/")
+    api_key = data.get("api_key")
+    model = (data.get("model") or "").strip() or None
+
+    if provider_id and not base_url:
+        provider = config_db.get_ai_provider(int(provider_id))
+        if not provider:
+            return jsonify({"success": False, "message": "供应商不存在"}), 200
+        base_url = provider["base_url"]
+        model = model or provider.get("model")
+        api_key = decrypt(provider.get("api_key") or "")
+    elif provider_id and (api_key is None or str(api_key).strip() == ""):
+        provider = config_db.get_ai_provider(int(provider_id))
+        if provider:
+            api_key = decrypt(provider.get("api_key") or "")
+
+    if not base_url:
+        return jsonify({"success": False, "message": "缺少 Base URL"}), 200
+    try:
+        ok, message = ai_renamer.test(base_url, api_key or "", model)
+    except ValueError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 200
+    return jsonify({"success": bool(ok), "message": message}), 200
+
+
+@app.route("/api/ai/bindings", methods=["GET"])
+def get_ai_bindings():
+    return jsonify({"success": True, "bindings": config_db.get_ai_bindings()})
+
+
+@app.route("/api/ai/bindings", methods=["POST"])
+def add_ai_binding():
+    data = request.get_json(silent=True) or {}
+    try:
+        path = normalize_binding_path(data.get("path"))
+    except ValueError:
+        return jsonify({"success": False, "message": "路径不合法"}), 200
+    if not path:
+        return jsonify({"success": False, "message": "缺少 path"}), 200
+    try:
+        target = _safe_media_path(path)
+    except ValueError:
+        return jsonify({"success": False, "message": "路径越界"}), 200
+    if not target.is_dir():
+        return jsonify({"success": False, "message": "目录不存在于媒体库中"}), 200
+
+    model = (data.get("model") or "").strip() or None
+    prompt = (data.get("prompt") or "").strip() or None
+    provider_id = data.get("provider_id")
+    provider_id = int(provider_id) if provider_id else None
+    if provider_id and not config_db.get_ai_provider(provider_id):
+        return jsonify({"success": False, "message": "供应商不存在"}), 200
+    config_db.add_ai_binding(path, model, prompt, provider_id)
+    return jsonify({"success": True, "message": "AI 绑定已保存"})
+
+
+@app.route("/api/ai/bindings", methods=["DELETE"])
+def delete_ai_binding():
+    data = request.get_json(silent=True) or {}
+    try:
+        path = normalize_binding_path(data.get("path"))
+    except ValueError:
+        return jsonify({"success": False, "message": "路径不合法"}), 200
+    if not path:
+        return jsonify({"success": False, "message": "缺少 path"}), 200
+    removed = config_db.remove_ai_binding(path)
+    return jsonify(
+        {
+            "success": True,
+            "removed": removed,
+            "message": "已解除绑定" if removed else "未找到该绑定",
+        }
+    )
 
 
 @app.route("/api/whitelist", methods=["POST"])
@@ -531,9 +752,11 @@ def get_logs():
 
 @app.route("/api/logs/<filename>")
 def get_log_content(filename: str):
-    log_dir = Path(LOGS_PATH)
-    log_file = log_dir / filename
-    if not log_file.exists() or not filename.endswith(".log"):
+    log_dir = Path(LOGS_PATH).resolve()
+    if Path(filename).name != filename or not filename.endswith(".log"):
+        return jsonify({"error": "非法文件名"}), 400
+    log_file = (log_dir / filename).resolve()
+    if log_dir not in log_file.parents or not log_file.exists():
         return jsonify({"error": "日志文件不存在"}), 404
     try:
         with log_file.open("r", encoding="utf-8") as f:
@@ -655,4 +878,16 @@ if __name__ == "__main__":
         )
 
     port = int(os.getenv("FLASK_PORT", 15000))
-    app.run(host="0.0.0.0", port=port, debug=False)
+    try:
+        from waitress import serve  # type: ignore
+
+        app.logger.info("Serving with waitress on 0.0.0.0:%s", port)
+        serve(
+            app,
+            host="0.0.0.0",
+            port=port,
+            threads=int(os.getenv("SERVER_THREADS", "8")),
+        )
+    except ImportError:
+        app.logger.warning("waitress 未安装，回退到 Flask 开发服务器")
+        app.run(host="0.0.0.0", port=port, debug=False, threaded=True)

@@ -8,8 +8,43 @@ new Vue({
     authLoading: false,
     authError: "",
 
-    // 选项卡
+    // 选项卡与导航
     activeTab: "dashboard",
+
+    // 主题
+    theme: "light",
+
+    // AI 重命名
+    showAiModal: false,
+    aiStatus: {
+      configured: false,
+      model: "",
+      base_url: "",
+      bindings: 0,
+      provider_count: 0,
+      default_provider: null,
+    },
+    aiBindings: [],
+    newAiPath: "",
+    newAiProviderId: "",
+    aiLoading: false,
+
+    // AI 供应商
+    showProviderModal: false,
+    aiProviders: [],
+    aiProviderForm: {
+      id: null,
+      name: "",
+      base_url: "",
+      api_key: "",
+      model: "",
+      enabled: true,
+      is_default: false,
+    },
+    aiProviderEditing: false,
+    aiTesting: false,
+    aiTestResult: null,
+    aiSaving: false,
 
     // 系统状态
     systemStatus: null,
@@ -51,8 +86,6 @@ new Vue({
     logContent: "",
     logsLoading: false,
     logContentLoading: false,
-    logContentError: "",
-
     logContentError: "",
     showSubPathModal: false,
     showSubPathRollbackModal: false,
@@ -102,6 +135,8 @@ new Vue({
   },
 
   mounted() {
+    this.theme = document.documentElement.getAttribute("data-theme") || "light";
+    this.applyTheme();
     this.autoAuthenticate();
   },
   computed: {
@@ -212,8 +247,261 @@ new Vue({
         );
       }
     },
+    navItems() {
+      return [
+        { key: "dashboard", label: "仪表板", icon: "bi-speedometer2" },
+        { key: "history", label: "扫描历史", icon: "bi-clock-history" },
+        { key: "records", label: "变更记录", icon: "bi-list-ul" },
+        { key: "logs", label: "日志查看", icon: "bi-file-text" },
+      ];
+    },
+    tabMeta() {
+      return {
+        dashboard: "仪表板",
+        history: "扫描历史",
+        records: "变更记录",
+        logs: "日志查看",
+      }[this.activeTab];
+    },
   },
   methods: {
+    selectTab(key) {
+      this.activeTab = key;
+    },
+    applyTheme() {
+      document.documentElement.setAttribute("data-theme", this.theme);
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute("content", this.theme === "dark" ? "#0f1013" : "#f7f7f8");
+    },
+    toggleTheme() {
+      this.theme = this.theme === "dark" ? "light" : "dark";
+      localStorage.setItem("theme", this.theme);
+      this.applyTheme();
+    },
+    async showAiConfig() {
+      this.showAiModal = true;
+      await Promise.all([this.loadAiStatus(), this.loadAiProviders()]);
+    },
+    closeAiConfig() {
+      this.showAiModal = false;
+      this.newAiPath = "";
+    },
+    async loadAiStatus() {
+      try {
+        const [status, bindings] = await Promise.all([
+          this.auth_fetch("/api/ai/status"),
+          this.auth_fetch("/api/ai/bindings"),
+        ]);
+        this.aiStatus = status;
+        this.aiBindings = bindings.bindings || [];
+      } catch (error) {
+        this.showError("加载 AI 配置失败", "AI");
+      }
+    },
+    async addAiBinding() {
+      const path = this.newAiPath.trim();
+      if (!path) return;
+      this.aiLoading = true;
+      try {
+        const result = await this.auth_fetch("/api/ai/bindings", {
+          method: "POST",
+          body: JSON.stringify({ path, provider_id: this.newAiProviderId || null }),
+        });
+        if (result.success) {
+          this.newAiPath = "";
+          this.showSuccess(result.message || "绑定成功", "AI");
+          await this.loadAiStatus();
+        } else {
+          this.showError(result.message || "绑定失败", "AI");
+        }
+      } catch (error) {
+        this.showError("绑定失败：网络错误", "AI");
+      } finally {
+        this.aiLoading = false;
+      }
+    },
+    async removeAiBinding(path) {
+      this.aiLoading = true;
+      try {
+        const result = await this.auth_fetch("/api/ai/bindings", {
+          method: "DELETE",
+          body: JSON.stringify({ path }),
+        });
+        if (result.success) {
+          this.showSuccess(result.message || "已解除绑定", "AI");
+          await this.loadAiStatus();
+        } else {
+          this.showError(result.message || "解除失败", "AI");
+        }
+      } catch (error) {
+        this.showError("解除失败：网络错误", "AI");
+      } finally {
+        this.aiLoading = false;
+      }
+    },
+    providerName(id) {
+      if (!id) return "默认供应商";
+      const found = this.aiProviders.find((p) => p.id === id);
+      return found ? found.name : "已删除的供应商";
+    },
+    async showProviderConfig() {
+      this.showProviderModal = true;
+      this.aiTestResult = null;
+      await Promise.all([this.loadAiProviders(), this.loadAiStatus()]);
+    },
+    closeProviderConfig() {
+      this.showProviderModal = false;
+      this.resetAiProviderForm();
+      this.aiTestResult = null;
+    },
+    newAiProvider() {
+      this.aiProviderEditing = true;
+      this.aiTestResult = null;
+      this.aiProviderForm = {
+        id: null,
+        name: "",
+        base_url: "",
+        api_key: "",
+        model: "",
+        enabled: true,
+        is_default: this.aiProviders.length === 0,
+      };
+    },
+    editAiProvider(provider) {
+      this.aiProviderEditing = true;
+      this.aiTestResult = null;
+      this.aiProviderForm = {
+        id: provider.id,
+        name: provider.name,
+        base_url: provider.base_url,
+        api_key: "",
+        model: provider.model || "",
+        enabled: provider.enabled,
+        is_default: provider.is_default,
+      };
+    },
+    resetAiProviderForm() {
+      this.aiProviderEditing = false;
+      this.aiProviderForm = {
+        id: null,
+        name: "",
+        base_url: "",
+        api_key: "",
+        model: "",
+        enabled: true,
+        is_default: false,
+      };
+    },
+    async loadAiProviders() {
+      try {
+        const data = await this.auth_fetch("/api/ai/providers");
+        this.aiProviders = data.providers || [];
+      } catch (error) {
+        this.showError("加载供应商失败", "AI");
+      }
+    },
+    async saveAiProvider() {
+      if (!this.aiProviderForm.name || !this.aiProviderForm.base_url) return;
+      this.aiSaving = true;
+      try {
+        const result = await this.auth_fetch("/api/ai/providers", {
+          method: "POST",
+          body: JSON.stringify(this.aiProviderForm),
+        });
+        if (result.success) {
+          this.showSuccess(result.message || "已保存", "AI");
+          this.resetAiProviderForm();
+          await Promise.all([this.loadAiProviders(), this.loadAiStatus()]);
+        } else {
+          this.showError(result.message || "保存失败", "AI");
+        }
+      } catch (error) {
+        this.showError("保存失败：网络错误", "AI");
+      } finally {
+        this.aiSaving = false;
+      }
+    },
+    async deleteAiProvider(provider) {
+      this.aiSaving = true;
+      try {
+        const result = await this.auth_fetch("/api/ai/providers", {
+          method: "DELETE",
+          body: JSON.stringify({ id: provider.id }),
+        });
+        if (result.success) {
+          this.showSuccess(result.message || "已删除", "AI");
+          await Promise.all([this.loadAiProviders(), this.loadAiStatus()]);
+        } else {
+          this.showError(result.message || "删除失败", "AI");
+        }
+      } catch (error) {
+        this.showError("删除失败：网络错误", "AI");
+      } finally {
+        this.aiSaving = false;
+      }
+    },
+    async setDefaultProvider(provider) {
+      this.aiSaving = true;
+      try {
+        const result = await this.auth_fetch("/api/ai/providers", {
+          method: "POST",
+          body: JSON.stringify({
+            id: provider.id,
+            name: provider.name,
+            base_url: provider.base_url,
+            model: provider.model,
+            enabled: provider.enabled,
+            is_default: true,
+          }),
+        });
+        if (result.success) {
+          this.showSuccess("已设为默认供应商", "AI");
+          await Promise.all([this.loadAiProviders(), this.loadAiStatus()]);
+        } else {
+          this.showError(result.message || "设置失败", "AI");
+        }
+      } catch (error) {
+        this.showError("设置失败：网络错误", "AI");
+      } finally {
+        this.aiSaving = false;
+      }
+    },
+    async testAiProvider(target) {
+      if (!target || !target.base_url) {
+        this.aiTestResult = { ok: false, message: "请先填写 Base URL" };
+        return;
+      }
+      this.aiTesting = true;
+      this.aiTestResult = null;
+      try {
+        const result = await this.auth_fetch("/api/ai/providers/test", {
+          method: "POST",
+          body: JSON.stringify({
+            id: target.id || null,
+            base_url: target.base_url,
+            model: target.model || null,
+            api_key: target.api_key || "",
+          }),
+        });
+        this.aiTestResult = {
+          ok: !!result.success,
+          message: result.message || (result.success ? "连接成功" : "连接失败"),
+        };
+      } catch (error) {
+        this.aiTestResult = { ok: false, message: "测试失败：网络错误" };
+      } finally {
+        this.aiTesting = false;
+      }
+    },
+    refreshActive() {
+      const loaders = {
+        dashboard: () => this.loadSystemStatus(),
+        history: () => this.loadHistory(),
+        records: () => this.loadChangeRecords(),
+        logs: () => this.loadLogFiles(),
+      };
+      (loaders[this.activeTab] || loaders.dashboard)();
+    },
     showToast(
       message,
       type = "info",
@@ -850,11 +1138,6 @@ new Vue({
       }
     },
 
-    // 工具方法
-    formatDate(timestamp) {
-      return new Date(timestamp).toLocaleString();
-    },
-
     closeSubPathModal() {
       this.showSubPathModal = false;
       this.subPath = ""; // 关闭时顺便清空
@@ -1050,11 +1333,6 @@ new Vue({
         }
         this.whitelistFiles = [];
       }
-    },
-    // 关闭未重命名文件弹窗
-    closeWhitelistModal() {
-      this.showWhitelistModal = false;
-      this.whitelistFiles = [];
     },
     // 添加到白名单
     async addToWhitelist(filePath) {
@@ -1338,7 +1616,6 @@ new Vue({
           this.newWhitelistItems = [];
           this.loadSystemStatus();
           this.loadHistory();
-          this.whi;
         } else {
           this.showModalComponent(
             "error",
@@ -1569,9 +1846,6 @@ new Vue({
       }
     },
 
-    triggerImportFile() {
-      this.$refs.importFileInput.click();
-    },
     triggerImportFile() {
       this.$refs.importFileInput.click();
     },
