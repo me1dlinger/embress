@@ -46,6 +46,25 @@ new Vue({
     aiTestResult: null,
     aiSaving: false,
 
+    // 智能整理
+    organizeEnabled: false,
+    organizeProviderId: "",
+    organizeInterval: 3600,
+    organizeLoose: [],
+    organizeLoading: false,
+    organizeToggling: false,
+    organizeSaving: false,
+    organizeRunning: false,
+    organizeHistory: [],
+    organizeHistoryLoading: false,
+    organizeResetting: false,
+    showOrganizeResultModal: false,
+    showOrganizeTimeline: false,
+    organizeResult: null,
+    organizeRecords: [],
+    organizeRecordsLoading: false,
+    organizeRestoring: false,
+
     // 系统状态
     systemStatus: null,
     statusLoading: false,
@@ -75,6 +94,7 @@ new Vue({
     groupBy: "type",
     typeOrder: [
       "rename",
+      "organize",
       "subtitle_rename",
       "audio_rename",
       "picture_rename",
@@ -129,6 +149,7 @@ new Vue({
     confirmCallback: null,
     toasts: [],
     toastId: 0,
+    pendingConfirmResolve: null,
     showSearchQuery: "",
     filteredShowsChangeList: [],
     showFilteredOnly: false,
@@ -255,6 +276,51 @@ new Vue({
         { key: "logs", label: "日志查看", icon: "bi-file-text" },
       ];
     },
+    organizeCachedCount() {
+      return this.organizeLoose.filter((item) => item && item.cached).length;
+    },
+    organizeRecordsActiveCount() {
+      return this.organizeRecords.filter((record) => !record.rollback).length;
+    },
+    organizeResultIsRun() {
+      if (!this.organizeResult) return false;
+      return (
+        this.organizeResult.scan_type === "organize" ||
+        (this.organizeResult.milestones || []).length > 0
+      );
+    },
+    organizeRecordGroups() {
+      const groups = {};
+      this.organizeRecords.forEach((record) => {
+        const showKey = `${record.media_type || "未分类"} · ${record.show_name || "未分类"}`;
+        if (!groups[showKey]) {
+          groups[showKey] = {
+            media_type: record.media_type,
+            show_name: record.show_name,
+            seasons: {},
+            total: 0,
+            active: 0,
+          };
+        }
+        const group = groups[showKey];
+        const seasonKey = record.season_name || "未知季度";
+        if (!group.seasons[seasonKey]) {
+          group.seasons[seasonKey] = {
+            season_name: record.season_name,
+            records: [],
+            active: 0,
+          };
+        }
+        const season = group.seasons[seasonKey];
+        season.records.push(record);
+        group.total += 1;
+        if (!record.rollback) {
+          group.active += 1;
+          season.active += 1;
+        }
+      });
+      return groups;
+    },
     tabMeta() {
       return {
         dashboard: "仪表板",
@@ -280,7 +346,12 @@ new Vue({
     },
     async showAiConfig() {
       this.showAiModal = true;
-      await Promise.all([this.loadAiStatus(), this.loadAiProviders()]);
+      await Promise.all([
+        this.loadAiStatus(),
+        this.loadAiProviders(),
+        this.loadSystemStatus(),
+      ]);
+      await this.loadOrganizeData();
     },
     closeAiConfig() {
       this.showAiModal = false;
@@ -493,6 +564,222 @@ new Vue({
         this.aiTesting = false;
       }
     },
+    syncOrganizeState(data) {
+      if (!data) return;
+      this.organizeEnabled = !!data.organize_enabled;
+      if (data.organize_interval) {
+        this.organizeInterval = data.organize_interval;
+      }
+      this.organizeProviderId =
+        data.organize_provider_id === null || data.organize_provider_id === undefined
+          ? ""
+          : data.organize_provider_id;
+    },
+    async loadOrganizeData() {
+      await Promise.all([this.loadOrganizePreview(), this.loadOrganizeHistory()]);
+    },
+    async loadOrganizePreview() {
+      this.organizeLoading = true;
+      try {
+        const data = await this.auth_fetch("/api/organize/preview");
+        this.organizeLoose = data.files || [];
+      } catch (error) {
+        this.showError("加载待整理文件失败", "智能整理");
+      } finally {
+        this.organizeLoading = false;
+      }
+    },
+    async resetOrganizeCache() {
+      this.organizeResetting = true;
+      try {
+        const result = await this.auth_fetch("/api/organize/reset", {
+          method: "POST",
+        });
+        if (result.success) {
+          this.showSuccess(result.message || "已清空整理缓存", "智能整理");
+          await this.loadOrganizePreview();
+        } else {
+          this.showError(result.message || "操作失败", "智能整理");
+        }
+      } catch (error) {
+        this.showError("操作失败：网络错误", "智能整理");
+      } finally {
+        this.organizeResetting = false;
+      }
+    },
+    async loadOrganizeHistory() {
+      this.organizeHistoryLoading = true;
+      try {
+        const data = await this.auth_fetch("/api/organize/history?limit=20");
+        this.organizeHistory = data.history || [];
+      } catch (error) {
+        this.organizeHistory = [];
+      } finally {
+        this.organizeHistoryLoading = false;
+      }
+    },
+    async toggleOrganize(enabled) {
+      this.organizeToggling = true;
+      try {
+        const result = await this.auth_fetch("/api/organize/toggle", {
+          method: "POST",
+          body: JSON.stringify({ enabled }),
+        });
+        if (result.success) {
+          this.showSuccess(result.message || "已更新", "智能整理");
+          await this.loadSystemStatus();
+          await this.loadOrganizePreview();
+          if (enabled) {
+            await this.loadOrganizeHistory();
+          }
+        } else {
+          this.showError(result.message || "切换失败", "智能整理");
+        }
+      } catch (error) {
+        this.showError("切换失败：网络错误", "智能整理");
+      } finally {
+        this.organizeToggling = false;
+      }
+    },
+    async saveOrganizeProvider() {
+      try {
+        const result = await this.auth_fetch("/api/organize/provider", {
+          method: "POST",
+          body: JSON.stringify({
+            provider_id: this.organizeProviderId === "" ? null : this.organizeProviderId,
+          }),
+        });
+        if (result.success) {
+          this.showSuccess(result.message || "已更新", "智能整理");
+          await this.loadSystemStatus();
+        } else {
+          this.showError(result.message || "保存失败", "智能整理");
+        }
+      } catch (error) {
+        this.showError("保存失败：网络错误", "智能整理");
+      }
+    },
+    async saveOrganizeInterval() {
+      const seconds = parseInt(this.organizeInterval, 10);
+      if (!seconds || seconds < 60 || seconds > 86400) {
+        this.showError("间隔需在 60-86400 秒之间", "智能整理");
+        return;
+      }
+      this.organizeSaving = true;
+      try {
+        const result = await this.auth_fetch("/api/organize/interval", {
+          method: "POST",
+          body: JSON.stringify({ interval: seconds }),
+        });
+        if (result.success) {
+          this.showSuccess(result.message || "已更新", "智能整理");
+          await this.loadSystemStatus();
+        } else {
+          this.showError(result.message || "保存失败", "智能整理");
+        }
+      } catch (error) {
+        this.showError("保存失败：网络错误", "智能整理");
+      } finally {
+        this.organizeSaving = false;
+      }
+    },
+    async runOrganizeNow() {
+      this.organizeRunning = true;
+      try {
+        const result = await this.auth_fetch("/api/organize/run", {
+          method: "POST",
+        });
+        const data = result.result || {};
+        if (result.success) {
+          this.showSuccess(
+            `整理完成：移动 ${data.moved || 0} 个，跳过 ${data.skipped || 0} 个`,
+            "智能整理"
+          );
+        } else {
+          this.showError(result.message || "整理失败", "智能整理");
+        }
+        // 无论成功失败都展示明细，便于排查
+        this.showOrganizeResult(data);
+        this.loadHistory();
+        this.loadChangeRecords();
+        await this.loadSystemStatus();
+        await this.loadOrganizePreview();
+        await this.loadOrganizeHistory();
+      } catch (error) {
+        this.showError("整理失败：网络错误", "智能整理");
+      } finally {
+        this.organizeRunning = false;
+      }
+    },
+    showOrganizeResult(record) {
+      if (!record) return;
+      this.organizeResult = record;
+      this.showOrganizeTimeline = false;
+      this.showOrganizeResultModal = true;
+      this.loadOrganizeRecords();
+    },
+    closeOrganizeResult() {
+      this.showOrganizeResultModal = false;
+      this.organizeResult = null;
+      this.showOrganizeTimeline = false;
+    },
+    async loadOrganizeRecords() {
+      this.organizeRecordsLoading = true;
+      try {
+        const data = await this.auth_fetch("/api/organize/records");
+        this.organizeRecords = data.records || [];
+      } catch (error) {
+        this.organizeRecords = [];
+      } finally {
+        this.organizeRecordsLoading = false;
+      }
+    },
+    async restoreOrganize(scope, show, season, record) {
+      const payload = { scope };
+      let label = "该剧集";
+      if (scope === "file") {
+        payload.path = record.path;
+        label = record.original || "该文件";
+      } else if (scope === "season") {
+        payload.media_type = show.media_type;
+        payload.show_name = show.show_name;
+        payload.season_name = season.season_name;
+        label = `${show.show_name || ""} ${season.season_name || ""}`.trim() || "该季";
+      } else {
+        payload.media_type = show.media_type;
+        payload.show_name = show.show_name;
+      }
+      const confirmed = await this.confirm({
+        title: "还原 AI 整理结果",
+        message: `确认还原「${label}」的 AI 整理结果？文件将移回整理前的位置。`,
+        danger: true,
+      });
+      if (!confirmed) {
+        return;
+      }
+      this.organizeRestoring = true;
+      try {
+        const result = await this.auth_fetch("/api/organize/restore", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        if (result.success) {
+          this.showSuccess(
+            `已还原 ${result.restored || 0} 个文件${result.skipped ? `，跳过 ${result.skipped} 个` : ""}`,
+            "智能整理"
+          );
+        } else {
+          this.showError(result.message || "还原失败", "智能整理");
+        }
+        await Promise.all([this.loadOrganizeRecords(), this.loadOrganizePreview()]);
+        this.loadHistory();
+        this.loadChangeRecords();
+      } catch (error) {
+        this.showError("还原失败：网络错误", "智能整理");
+      } finally {
+        this.organizeRestoring = false;
+      }
+    },
     refreshActive() {
       const loaders = {
         dashboard: () => this.loadSystemStatus(),
@@ -587,6 +874,29 @@ new Vue({
         this.toasts = [];
       }, 300);
     },
+
+    confirm(options = {}) {
+      return new Promise((resolve) => {
+        this.pendingConfirmResolve = resolve;
+        this.showModalComponent(
+          options.danger ? "warning" : "info",
+          options.title || "确认操作",
+          options.message || "",
+          options.danger ? "bi-exclamation-triangle" : "bi-question-circle",
+          true,
+          () => this.settleConfirm(true)
+        );
+      });
+    },
+
+    settleConfirm(result) {
+      const resolve = this.pendingConfirmResolve;
+      this.pendingConfirmResolve = null;
+      if (typeof resolve === "function") {
+        resolve(result);
+      }
+    },
+
     async auth_fetch(url, options = {}) {
       const accessKey = localStorage.getItem("access_key");
       const defaultHeaders = {
@@ -690,6 +1000,7 @@ new Vue({
         const data = await this.auth_fetch("/api/status");
         this.systemStatus = data;
         this.scanInterval = data.scan_interval;
+        this.syncOrganizeState(data);
         if (data.last_scan) {
           this.lastScanResult = data.last_scan;
         }
@@ -1034,6 +1345,7 @@ new Vue({
     getTypeIcon(type) {
       const iconMap = {
         rename: "bi-file-earmark-text text-primary",
+        organize: "bi-magic text-info",
         subtitle_rename: "bi-card-text text-info",
         audio_rename: "bi-volume-up text-success",
         picture_rename: "bi-image text-warning",
@@ -1044,6 +1356,7 @@ new Vue({
     getTypeLabel(type) {
       const typeMap = {
         rename: "文件重命名",
+        organize: "智能整理",
         subtitle_rename: "字幕重命名",
         audio_rename: "音频重命名",
         picture_rename: "图片重命名",
@@ -2004,6 +2317,8 @@ new Vue({
 
     closeModal() {
       this.showModal = false;
+      // 取消/关闭时让等待中的 confirm() 返回 false
+      this.settleConfirm(false);
     },
 
     confirmAction() {

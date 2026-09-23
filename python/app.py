@@ -17,6 +17,16 @@ from apscheduler.schedulers.base import (  # type: ignore
     STATE_RUNNING,
     STATE_STOPPED,
 )
+from ai_organizer import (
+    auto_organizer,
+    organize_enabled,
+    organize_interval,
+    organize_provider_id,
+    reset_organize_attempts,
+    set_organize_enabled,
+    set_organize_interval,
+    set_organize_provider_id,
+)
 from ai_renamer import AI_BASE_URL, AI_MODEL, ai_renamer, normalize_binding_path
 from crypto_utils import decrypt, encrypt, mask
 from database import config_db
@@ -115,6 +125,40 @@ def scheduled_scan() -> None:
         email_notifier.send_notification(error_result)
 
 
+def _job_next_run_time(job_id: str):
+    """返回任务下次执行时间字符串，未运行返回 None"""
+    job = scheduler.get_job(job_id)
+    if not job or job.next_run_time is None:
+        return None
+    return job.next_run_time.astimezone().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def scheduled_organize() -> None:
+    """定时智能整理：把散落的剧集文件归类到规范目录"""
+    if not organize_enabled():
+        return
+    try:
+        app.logger.info("Start scheduled auto organizing … …")
+        result = auto_organizer.run()
+        app.logger.info("Auto organizing completed: %s", result.get("status"))
+        # 无候选文件时不留痕，避免污染扫描历史
+        if result.get("processed") or result.get("status") == "error":
+            config_db.add_scan_history(result)
+        if result.get("status") == "completed" and result.get("moved"):
+            email_notifier.send_notification(result)
+    except Exception as exc:
+        app.logger.exception("Scheduled auto organizing failed")
+        error_result = {
+            "status": "error",
+            "scan_type": "organize",
+            "message": str(exc),
+            "timestamp": datetime.now().isoformat(),
+            "target": "AUTO",
+        }
+        config_db.add_scan_history(error_result)
+        email_notifier.send_notification(error_result)
+
+
 def enrich_path_fields(entries: list[dict]) -> list[dict]:
     enriched = []
     for item in entries:
@@ -180,6 +224,10 @@ def get_status():
                 STATE_PAUSED: "已暂停",
             }.get(scheduler_state, f"UNKNOWN({scheduler_state})"),
             "ai_enabled": ai_renamer.is_configured(),
+            "organize_enabled": organize_enabled(),
+            "organize_interval": organize_interval(),
+            "organize_provider_id": organize_provider_id(),
+            "organize_next_run_time": _job_next_run_time("organize_job"),
         }
     )
 
@@ -632,6 +680,210 @@ def delete_ai_binding():
     )
 
 
+@app.route("/api/organize/preview")
+def organize_preview():
+    """预览当前散落在媒体库中的待整理视频文件"""
+    try:
+        # 按当前提示词/模型刷新一次缓存有效性，避免展示过期结论
+        auto_organizer.sync_attempt_cache()
+        files = auto_organizer.preview_loose_files()
+        cached = sum(1 for item in files if item["cached"])
+        return jsonify(
+            {
+                "success": True,
+                "count": len(files),
+                "cached_count": cached,
+                "files": files[:200],
+            }
+        )
+    except Exception as exc:
+        app.logger.exception("Failed to preview loose files")
+        return jsonify({"success": False, "message": str(exc)}), 500
+
+
+@app.route("/api/organize/reset", methods=["POST"])
+def reset_organize_cache():
+    """清空整理尝试缓存，让全部散落文件重新参与整理"""
+    try:
+        reset_organize_attempts()
+        return jsonify({"success": True, "message": "已清空整理缓存，全部散落文件将重新参与整理"})
+    except Exception as exc:
+        app.logger.exception("Failed to reset organize cache")
+        return jsonify({"success": False, "message": str(exc)}), 500
+
+
+@app.route("/api/organize/records")
+def organize_records():
+    """返回 AI 整理产生的变更记录（含已还原），用于详情展示与还原操作"""
+    try:
+        media_root = Path(MEDIA_PATH).resolve()
+        records = config_db.get_organize_change_records(limit=500)
+        for record in records:
+            try:
+                record["relative_path"] = str(
+                    Path(record["path"]).resolve().relative_to(media_root)
+                )
+            except ValueError:
+                record["relative_path"] = record["path"]
+            if record.get("original_dir"):
+                original_path = Path(record["original_dir"]) / record.get("original")
+                record["original_path"] = str(original_path)
+                try:
+                    record["original_relative_path"] = str(
+                        original_path.resolve().relative_to(media_root)
+                    )
+                except ValueError:
+                    record["original_relative_path"] = str(original_path)
+            else:
+                record["original_path"] = record.get("original")
+                record["original_relative_path"] = record.get("original")
+        return jsonify({"success": True, "records": records, "total": len(records)})
+    except Exception as exc:
+        app.logger.exception("Failed to read organize records")
+        return jsonify({"success": False, "message": str(exc)}), 500
+
+
+@app.route("/api/organize/restore", methods=["POST"])
+def restore_organize():
+    """还原 AI 整理结果：按剧集 / 按 Season / 按片名"""
+    data = request.get_json(silent=True) or {}
+    scope = data.get("scope")
+    if scope not in ("show", "season", "file"):
+        return jsonify({"success": False, "message": "scope 需为 show / season / file"}), 200
+    if scope == "file" and not data.get("path"):
+        return jsonify({"success": False, "message": "缺少 path"}), 200
+    if scope in ("show", "season") and not (
+        data.get("media_type") and data.get("show_name")
+    ):
+        return jsonify({"success": False, "message": "缺少剧集信息"}), 200
+    try:
+        result = auto_organizer.restore(
+            scope=scope,
+            media_type=data.get("media_type"),
+            show_name=data.get("show_name"),
+            season_name=data.get("season_name"),
+            path=data.get("path"),
+        )
+        return jsonify(result)
+    except Exception as exc:
+        app.logger.exception("Restoring organize result failed")
+        return jsonify({"success": False, "message": str(exc)}), 500
+
+
+@app.route("/api/organize/toggle", methods=["POST"])
+def toggle_organize():
+    """开启/关闭定时智能整理开关"""
+    data = request.get_json(silent=True) or {}
+    enable = bool(data.get("enabled"))
+    try:
+        set_organize_enabled(enable)
+        job = scheduler.get_job("organize_job")
+        if job:
+            if enable:
+                job.resume()
+            else:
+                job.pause()
+        app.logger.info("Auto organize switch set to %s", enable)
+        return jsonify(
+            {
+                "success": True,
+                "organize_enabled": enable,
+                "organize_next_run_time": _job_next_run_time("organize_job"),
+                "message": "已开启定时智能整理" if enable else "已关闭定时智能整理",
+            }
+        )
+    except Exception as exc:
+        app.logger.exception("Failed to toggle auto organize")
+        return jsonify({"success": False, "message": str(exc)}), 500
+
+
+@app.route("/api/organize/interval", methods=["POST"])
+def update_organize_interval():
+    """更新智能整理执行间隔"""
+    data = request.get_json(silent=True) or {}
+    try:
+        seconds = int(data.get("interval"))
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "message": "interval 必须为整数秒"}), 200
+    if seconds < 60 or seconds > 86400:
+        return jsonify({"success": False, "message": "interval 需在 60-86400 秒之间"}), 200
+    try:
+        set_organize_interval(seconds)
+        if scheduler.get_job("organize_job"):
+            scheduler.reschedule_job(
+                "organize_job",
+                trigger="interval",
+                seconds=seconds,
+                start_date=get_aligned_start(seconds),
+            )
+        return jsonify(
+            {
+                "success": True,
+                "organize_interval": seconds,
+                "organize_next_run_time": _job_next_run_time("organize_job"),
+                "message": f"整理间隔已更新为 {seconds} 秒",
+            }
+        )
+    except Exception as exc:
+        app.logger.exception("Failed to update auto organize interval")
+        return jsonify({"success": False, "message": str(exc)}), 500
+
+
+@app.route("/api/organize/run", methods=["POST"])
+def run_organize_now():
+    """立即执行一次智能整理"""
+    if not ai_renamer.is_configured():
+        return jsonify({"success": False, "message": "未配置可用的 AI 供应商"}), 200
+    try:
+        app.logger.info("Start manual auto organizing … …")
+        result = auto_organizer.run()
+        config_db.add_scan_history(result)
+        if result.get("status") == "error":
+            return (
+                jsonify(
+                    {"success": False, "message": result.get("message"), "result": result}
+                ),
+                200,
+            )
+        return jsonify({"success": True, "result": result})
+    except Exception as exc:
+        app.logger.exception("Manual auto organizing failed")
+        return jsonify({"success": False, "message": str(exc)}), 500
+
+
+@app.route("/api/organize/provider", methods=["POST"])
+def update_organize_provider():
+    """指定智能整理所使用的模型供应商"""
+    data = request.get_json(silent=True) or {}
+    provider_id = data.get("provider_id")
+    try:
+        set_organize_provider_id(provider_id)
+        return jsonify(
+            {
+                "success": True,
+                "organize_provider_id": organize_provider_id(),
+                "message": "已更新智能整理模型",
+            }
+        )
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "message": "provider_id 不合法"}), 200
+    except Exception as exc:
+        app.logger.exception("Failed to update organize provider")
+        return jsonify({"success": False, "message": str(exc)}), 500
+
+
+@app.route("/api/organize/history")
+def organize_history():
+    """返回 AI 自动整理的执行历史"""
+    try:
+        limit = request.args.get("limit", default=20, type=int)
+        limit = max(1, min(limit or 20, 100))
+        return jsonify({"success": True, "history": config_db.get_organize_history(limit)})
+    except Exception as exc:
+        app.logger.exception("Failed to read organize history")
+        return jsonify({"success": False, "message": str(exc)}), 500
+
+
 @app.route("/api/whitelist", methods=["POST"])
 def add_to_whitelist():
     data = request.get_json(silent=True) or {}
@@ -860,6 +1112,21 @@ if __name__ == "__main__":
             replace_existing=True,
         )
         scan_job.pause()
+
+        # 智能整理任务（按开关状态决定是否运行）
+        organize_job = scheduler.add_job(
+            func=scheduled_organize,
+            trigger="interval",
+            seconds=organize_interval(),
+            id="organize_job",
+            name="智能整理任务",
+            start_date=get_aligned_start(organize_interval()),
+            replace_existing=True,
+        )
+        if organize_enabled():
+            organize_job.resume()
+        else:
+            organize_job.pause()
 
         # 日志清理任务（始终运行）
         scheduler.add_job(

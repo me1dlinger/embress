@@ -17,6 +17,7 @@ from typing import Dict, List, Optional
 from crypto_utils import decrypt
 from database import config_db
 from logging_utils import get_logger
+from prompt_loader import load_prompt
 
 LOGS_PATH = Path(os.getenv("LOG_PATH", "./data/logs"))
 MEDIA_PATH = os.getenv("MEDIA_PATH", "./data/media")
@@ -28,20 +29,8 @@ AI_MODEL = os.getenv("AI_MODEL", "gpt-4o-mini")
 AI_TIMEOUT = float(os.getenv("AI_TIMEOUT", "60"))
 AI_MAX_FILES = int(os.getenv("AI_MAX_FILES", "80"))
 
-# 默认系统提示词，可通过 AI_PROMPT 覆盖
-DEFAULT_SYSTEM_PROMPT = """你是 Emby / Jellyfin / Plex 媒体库的文件整理专家。
-你的任务：根据剧集名称、季数、一组待处理的视频文件名，以及该剧集已有的重命名示例，为每个文件生成符合 Emby 命名规范的新文件名。
-
-命名规范：
-1. 电视剧单集格式为 `剧名 - SxxEyy - 分集标题.扩展名`（分集标题可省略）。
-2. 若历史示例使用了不同风格（例如 `剧名 - [SxxEyy] - 其他`），请严格沿用历史示例的风格。
-3. 必须保留原文件的扩展名（如 .mkv、.mp4），以及集数标记之后的画质/来源标签（如 `[WebRip 1080p HEVC]`、`[BDRip]`）和字幕组标识。
-4. 不要凭空编造无法确定的集数；只有能从文件名或历史中可靠推断时才给出结果。
-5. 只替换/补齐集数标识，尽量少改动原文件名的其他部分。
-6. 如果某个文件无法可靠识别，则不要返回它。
-
-严格只输出 JSON，不要输出任何解释或 Markdown 代码块：
-{"renames":[{"original":"原文件名","new":"新文件名"}],"confidence":0.0}"""
+# 默认系统提示词来自独立文件 prompts/rename_system.txt，可通过 AI_PROMPT 覆盖
+DEFAULT_SYSTEM_PROMPT = load_prompt("rename_system.txt")
 
 
 def normalize_binding_path(raw: str) -> str:
@@ -204,6 +193,12 @@ class AIRenamer:
             pass
         return AIRenamer._env_config() is not None
 
+    def config_for(self, provider_id=None) -> Optional[Dict]:
+        """返回指定供应商的配置；provider_id 为空时回退默认供应商"""
+        if provider_id:
+            return self._resolve({"provider_id": provider_id})
+        return self._resolve(None)
+
     def test(self, base_url: str, api_key: str = "", model: str = None):
         """连通性测试，返回 (ok, message)"""
         if not base_url:
@@ -215,7 +210,7 @@ class AIRenamer:
             )
             reply = client.chat(
                 [
-                    {"role": "system", "content": "你是连通性探针，只回复 pong。"},
+                    {"role": "system", "content": load_prompt("connectivity_probe.txt")},
                     {"role": "user", "content": "ping"},
                 ],
                 model=probe_model,

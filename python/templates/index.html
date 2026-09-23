@@ -235,6 +235,13 @@
                       <span class="k"><i class="bi bi-calendar-check"></i>下次扫描</span>
                       <span class="v">[[ systemStatus.next_scan_time ]]</span>
                     </div>
+                    <div class="status-row">
+                      <span class="k"><i class="bi bi-magic"></i>智能整理</span>
+                      <span class="v">
+                        <span class="chip"
+                          :class="systemStatus.organize_enabled ? 'chip-success' : 'chip-outline'">[[ systemStatus.organize_enabled ? '已开启' : '已关闭' ]]</span>
+                      </span>
+                    </div>
                   </div>
                   <div v-else class="empty"><i class="bi bi-cloud-slash"></i><p>暂无系统状态</p></div>
                 </div>
@@ -255,7 +262,7 @@
                         :class="lastScanResult.status === 'error' ? 'bi-x-circle' : 'bi-check-circle'"></i>
                       <div>
                         <h4>[[ lastScanResult.status === 'error' ? '扫描失败' : (lastScanResult.scan_type === 'rollback' ?
-                          '回滚完成' : '扫描完成') ]]</h4>
+                          '回滚完成' : (lastScanResult.scan_type === 'organize' ? '整理完成' : '扫描完成')) ]]</h4>
                         <div class="result-rows">
                           <span><b>时间</b> [[ formatDate(lastScanResult.timestamp) ]]</span>
                           <span v-if="lastScanResult.status !== 'error'"><b>处理文件</b> [[ lastScanResult.processed ]]</span>
@@ -295,7 +302,7 @@
                         :class="lastEffectScanResult.status === 'error' ? 'bi-x-circle' : 'bi-check-circle'"></i>
                       <div>
                         <h4>[[ lastEffectScanResult.status === 'error' ? '扫描失败' : (lastEffectScanResult.scan_type ===
-                          'rollback' ? '回滚完成' : '扫描完成') ]]</h4>
+                          'rollback' ? '回滚完成' : (lastEffectScanResult.scan_type === 'organize' ? '整理完成' : '扫描完成')) ]]</h4>
                         <div class="result-rows">
                           <span><b>时间</b> [[ formatDate(lastEffectScanResult.timestamp) ]]</span>
                           <span v-if="lastEffectScanResult.status !== 'error'"><b>处理文件</b> [[ lastEffectScanResult.processed ]]</span>
@@ -354,12 +361,25 @@
                       <div class="hcard-title">
                         <i class="bi"
                           :class="record.status === 'error' ? 'bi-x-circle text-danger' : 'bi-check-circle text-success'"></i>
-                        <span>[[ record.scan_type === 'rollback' ? '回滚' : '扫描' ]] #[[ history.length - index ]]</span>
+                        <span>[[ record.scan_type === 'rollback' ? '回滚' : (record.scan_type === 'organize' ? '整理' : '扫描') ]] #[[ history.length - index ]]</span>
                       </div>
                       <span class="chip chip-outline"><i class="bi bi-calendar3"></i>[[ formatDate(record.timestamp) ]]</span>
                     </div>
                     <div class="hcard-body">
-                      <template v-if="record.status !== 'error'">
+                      <template v-if="record.status !== 'error' && record.scan_type === 'organize'">
+                        <div class="metric-grid mt-12">
+                          <div class="metric"><div class="n">[[ record.moved || record.renamed || 0 ]]</div><div class="t">已移动</div></div>
+                          <div class="metric"><div class="n">[[ record.skipped || 0 ]]</div><div class="t">已跳过</div></div>
+                          <div class="metric"><div class="n">[[ record.failed || 0 ]]</div><div class="t">失败</div></div>
+                        </div>
+                        <div class="result-extra">
+                          <span class="chip chip-ai"><i class="bi bi-magic"></i>AI 自动整理</span>
+                          <button type="button" class="btn btn-ghost btn-sm" @click="showOrganizeResult(record)">
+                            <i class="bi bi-eye"></i>查看明细
+                          </button>
+                        </div>
+                      </template>
+                      <template v-else-if="record.status !== 'error'">
                         <div class="target-path">[[ record.target ]]</div>
                         <div class="metric-grid mt-12">
                           <div class="metric">
@@ -440,7 +460,8 @@
                         <div class="show-info">
                           <div class="show-name">[[ show.media_type ]] · [[ show.show_name ]]</div>
                           <div class="show-meta">
-                            <span v-if="show.ai" class="chip chip-ai"><i class="bi bi-stars"></i>AI</span>
+                            <span v-if="show.organize" class="chip chip-ai"><i class="bi bi-magic"></i>AI整理</span>
+                            <span v-else-if="show.ai" class="chip chip-ai"><i class="bi bi-stars"></i>AI</span>
                             <span class="chip chip-primary">[[ show.record_count ]] 条记录</span>
                             <span v-for="type in show.types" :key="type" class="chip chip-outline">[[ getTypeLabel(type) ]]</span>
                           </div>
@@ -519,11 +540,12 @@
                               <div class="rc-title">
                                 <template v-if="record.rollback">
                                   <i class="bi bi-arrow-counterclockwise text-warning"></i>
-                                  <span class="chip chip-warning">已回滚</span>
+                                  <span class="chip chip-warning">[[ record.source === 'ai-organize' ? '已还原' : '已回滚' ]]</span>
                                 </template>
                                 <i v-else class="bi"
                                   :class="record.status === 'success' ? 'bi-check-circle text-success' : 'bi-x-circle text-danger'"></i>
-                                <span v-if="record.source === 'ai'" class="chip chip-ai"><i class="bi bi-stars"></i>AI</span>
+                                <span v-if="record.source === 'ai-organize'" class="chip chip-ai"><i class="bi bi-magic"></i>AI整理</span>
+                                <span v-else-if="record.source === 'ai'" class="chip chip-ai"><i class="bi bi-stars"></i>AI</span>
                                 <span v-if="groupBy === 'season'">[[ getTypeLabel(record.type) ]] · </span>
                                 <span class="copyable" @click.stop="copyText(record.season_relative_path)"
                                   :title="'复制路径：' + record.season_relative_path">[[ record.season_name ]]</span>
@@ -566,11 +588,12 @@
                           <div class="rc-title">
                             <template v-if="record.rollback">
                               <i class="bi bi-arrow-counterclockwise text-warning"></i>
-                              <span class="chip chip-warning">已回滚</span>
+                              <span class="chip chip-warning">[[ record.source === 'ai-organize' ? '已还原' : '已回滚' ]]</span>
                             </template>
                             <i v-else class="bi"
                               :class="record.status === 'success' ? 'bi-check-circle text-success' : 'bi-x-circle text-danger'"></i>
-                            <span v-if="record.source === 'ai'" class="chip chip-ai"><i class="bi bi-stars"></i>AI</span>
+                            <span v-if="record.source === 'ai-organize'" class="chip chip-ai"><i class="bi bi-magic"></i>AI整理</span>
+                            <span v-else-if="record.source === 'ai'" class="chip chip-ai"><i class="bi bi-stars"></i>AI</span>
                             <span class="copyable" @click.stop="copyText(record.season_relative_path)"
                               :title="'复制路径：' + record.season_relative_path">[[ record.season_name ]]</span>
                           </div>
@@ -650,7 +673,7 @@
     </div>
 
     <!-- 通用确认框 -->
-    <div v-if="showModal" class="modal">
+    <div v-if="showModal" class="modal modal-confirm">
       <div class="modal-scrim" @click="closeModal"></div>
       <div class="modal-box modal-sm">
         <div class="modal-body">
@@ -664,7 +687,8 @@
         </div>
         <div class="modal-foot">
           <button v-if="hasCancel" type="button" class="btn btn-ghost" @click="closeModal">取消</button>
-          <button type="button" class="btn btn-primary" @click="confirmAction">确定</button>
+          <button type="button" class="btn" :class="modalType === 'warning' ? 'btn-danger' : 'btn-primary'"
+            @click="confirmAction">[[ hasCancel ? '确定' : '知道了' ]]</button>
         </div>
       </div>
     </div>
@@ -1190,6 +1214,150 @@
       </div>
     </transition>
 
+    <!-- 智能整理明细 -->
+    <transition name="fade">
+      <div v-if="showOrganizeResultModal" class="modal modal-top">
+        <div class="modal-scrim" @click="closeOrganizeResult"></div>
+        <div class="modal-box modal-lg">
+          <div class="modal-head">
+            <h3><i class="bi bi-list-check"></i>整理明细</h3>
+            <div class="tools">
+              <button type="button" class="btn btn-ghost btn-icon" @click="closeOrganizeResult">
+                <i class="bi bi-x-lg"></i>
+              </button>
+            </div>
+          </div>
+          <div class="modal-body">
+            <template v-if="organizeResult">
+              <template v-if="organizeResultIsRun">
+              <div class="note" :class="organizeResult.status === 'error' ? 'note-danger' : 'note-success'">
+                <i class="bi" :class="organizeResult.status === 'error' ? 'bi-x-circle' : 'bi-check-circle'"></i>
+                <span v-if="organizeResult.status === 'error'">整理失败：[[ organizeResult.message ]]</span>
+                <span v-else>[[ formatDate(organizeResult.timestamp) ]] 完成，共处理 [[ organizeResult.processed || 0 ]] 个文件</span>
+              </div>
+              <div class="metric-grid mt-16" v-if="organizeResult.status !== 'error'">
+                <div class="metric"><div class="n">[[ organizeResult.moved || organizeResult.renamed || 0 ]]</div><div class="t">已移动</div></div>
+                <div class="metric"><div class="n">[[ organizeResult.skipped || 0 ]]</div><div class="t">已跳过</div></div>
+                <div class="metric"><div class="n">[[ organizeResult.failed || 0 ]]</div><div class="t">失败</div></div>
+              </div>
+              <div class="toolbar mt-20">
+                <button type="button" class="btn btn-ghost btn-sm" @click="showOrganizeTimeline = !showOrganizeTimeline">
+                  <i class="bi" :class="showOrganizeTimeline ? 'bi-chevron-up' : 'bi-diagram-3'"></i>
+                  [[ showOrganizeTimeline ? '收起整理过程' : '查看整理过程' ]]
+                </button>
+                <span class="muted" v-if="!showOrganizeTimeline && (organizeResult.milestones || []).length">
+                  共 [[ (organizeResult.milestones || []).length ]] 个步骤
+                </span>
+                <span class="grow"></span>
+              </div>
+              <div v-if="showOrganizeTimeline" class="timeline">
+                <div v-for="(step, idx) in (organizeResult.milestones || [])" :key="idx" class="tl-item"
+                  :class="step.phase === 'ai' ? 'ai' : (step.status === 'error' ? 'error' : (step.status === 'warn' ? 'warn' : ''))">
+                  <div class="tl-head">
+                    <span class="chip" :class="step.phase === 'ai' ? 'chip-ai' : 'chip-outline'">
+                      <i class="bi" :class="step.phase === 'ai' ? 'bi-stars' : 'bi-cpu'"></i>
+                      [[ step.phase === 'ai' ? 'AI' : '程序' ]]
+                    </span>
+                    <span class="tl-title">[[ step.title ]]</span>
+                    <span class="tl-time">[[ step.time ]]</span>
+                  </div>
+                  <div class="tl-detail">[[ step.detail ]]</div>
+                </div>
+                <div v-if="!(organizeResult.milestones || []).length" class="empty">
+                  <i class="bi bi-diagram-3"></i><p>本次没有记录过程步骤</p>
+                </div>
+              </div>
+              </template>
+
+              <div class="toolbar mt-24">
+                <span class="muted">整理变更与还原 <b>[[ organizeRecords.length ]]</b> 条</span>
+                <span class="grow"></span>
+                <span class="muted" v-if="organizeRecordsActiveCount">可还原 [[ organizeRecordsActiveCount ]] 条</span>
+                <button type="button" class="btn btn-ghost btn-sm" @click="loadOrganizeRecords"
+                  :disabled="organizeRecordsLoading">
+                  <i class="bi bi-arrow-clockwise"></i>刷新
+                </button>
+              </div>
+              <div v-if="organizeRecordsLoading" class="loading-box">
+                <span class="spinner spinner-brand"></span><span>加载中…</span>
+              </div>
+              <div v-else-if="organizeRecords.length === 0" class="empty">
+                <i class="bi bi-inbox"></i><p>暂无 AI 整理变更记录</p>
+              </div>
+              <div v-else>
+                <div v-for="(show, showKey) in organizeRecordGroups" :key="showKey" class="og-group">
+                  <div class="og-head">
+                    <i class="bi bi-collection-play"></i>
+                    <b>[[ showKey ]]</b>
+                    <span class="chip chip-outline">[[ show.total ]] 个文件</span>
+                    <span v-if="show.active === 0" class="chip chip-success"><i class="bi bi-check2-all"></i>全部已还原</span>
+                    <span class="grow"></span>
+                    <button type="button" class="btn btn-ghost btn-sm" @click="restoreOrganize('show', show)"
+                      :disabled="organizeRestoring || show.active === 0">
+                      <i class="bi bi-arrow-counterclockwise"></i>还原该剧集
+                    </button>
+                  </div>
+                  <div v-for="(season, seasonKey) in show.seasons" :key="seasonKey" class="og-season">
+                    <div class="og-head">
+                      <span class="muted">[[ seasonKey ]]</span>
+                      <span class="chip chip-outline">[[ season.records.length ]] 个</span>
+                      <span class="grow"></span>
+                      <button type="button" class="btn btn-ghost btn-sm" @click="restoreOrganize('season', show, season)"
+                        :disabled="organizeRestoring || season.active === 0">
+                        <i class="bi bi-arrow-counterclockwise"></i>还原该季
+                      </button>
+                    </div>
+                    <div v-for="(rec, idx) in season.records" :key="idx" class="og-file">
+                      <div class="og-paths">
+                        <span class="old">[[ rec.original_relative_path || rec.original ]]</span>
+                        <i class="bi bi-arrow-right arrow"></i>
+                        <span class="mono">[[ rec.relative_path || rec.path ]]</span>
+                      </div>
+                      <span v-if="rec.rollback" class="chip chip-success"><i class="bi bi-check2"></i>已还原</span>
+                      <button v-else type="button" class="btn btn-ghost btn-sm"
+                        @click="restoreOrganize('file', show, season, rec)" :disabled="organizeRestoring">
+                        <i class="bi bi-arrow-counterclockwise"></i>还原
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <template v-if="organizeResultIsRun">
+              <div class="toolbar mt-24">
+                <span class="muted">本次整理明细 <b>[[ (organizeResult.items || []).length ]]</b> 条</span>
+              </div>
+              <div v-if="!(organizeResult.items || []).length" class="empty">
+                <i class="bi bi-inbox"></i><p>本次没有可展示的文件变更</p>
+              </div>
+              <div v-else class="row-list mt-12">
+                <div v-for="(item, idx) in organizeResult.items" :key="idx" class="row-item">
+                  <div class="ri-main">
+                    <div class="ri-name">
+                      <i class="bi" :class="getTypeIcon(item.status === 'success' ? 'rename' : 'other')"></i>
+                      <span class="mono">[[ item.from ]]</span>
+                    </div>
+                    <div class="ri-sub mono" v-if="item.status === 'success'"><i class="bi bi-arrow-return-right"></i> [[ item.to ]]</div>
+                    <div class="ri-sub" v-else><i class="bi bi-info-circle"></i> [[ item.reason || item.error || '未处理' ]]</div>
+                  </div>
+                  <div class="ri-actions">
+                    <span class="chip"
+                      :class="item.status === 'success' ? 'chip-success' : (item.status === 'failed' ? 'chip-danger' : 'chip-outline')">
+                      [[ item.status === 'success' ? '已移动' : (item.status === 'failed' ? '失败' : '跳过') ]]
+                    </span>
+                  </div>
+                </div>
+              </div>
+              </template>
+            </template>
+          </div>
+          <div class="modal-foot">
+            <button type="button" class="btn btn-ghost" @click="closeOrganizeResult">关闭</button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
     <!-- AI 重命名 -->
     <transition name="fade">
       <div v-if="showAiModal" class="modal">
@@ -1255,6 +1423,123 @@
                   </button>
                 </div>
               </div>
+            </div>
+
+            <div class="divider mt-24"></div>
+
+            <label class="label mt-20"><i class="bi bi-magic"></i> 自动整理</label>
+            <div class="toolbar mt-12">
+              <label class="switch">
+                <input type="checkbox" :checked="organizeEnabled" @change="toggleOrganize($event.target.checked)"
+                  :disabled="organizeToggling || !aiStatus.configured" />
+                <span class="track"><span class="thumb"></span></span>
+                <span class="switch-label">[[ organizeEnabled ? '已开启' : '已关闭' ]]</span>
+              </label>
+              <span class="grow"></span>
+              <span class="muted" v-if="organizeEnabled && systemStatus && systemStatus.organize_next_run_time">
+                <i class="bi bi-clock"></i> 下次自动执行：[[ systemStatus.organize_next_run_time ]]
+              </span>
+            </div>
+            <div class="note note-info mt-12">
+              <i class="bi bi-info-circle"></i>
+              <span>开启后，系统会定时扫描媒体库中未归入 Season 目录的离散视频，由指定模型判断剧集归属，自动创建目录并完成移动、重命名。</span>
+            </div>
+
+            <div class="toolbar mt-16">
+              <span class="muted">使用模型</span>
+              <select class="select select-narrow" v-model="organizeProviderId" @change="saveOrganizeProvider"
+                :disabled="!aiStatus.configured">
+                <option value="">默认供应商</option>
+                <option v-for="p in aiProviders" :key="p.id" :value="p.id">[[ p.name ]]</option>
+              </select>
+              <span class="muted ml-16">间隔</span>
+              <input type="number" class="input select-narrow" v-model.number="organizeInterval" min="60" max="86400" />
+              <span class="muted">秒</span>
+              <button type="button" class="btn btn-ghost btn-sm" @click="saveOrganizeInterval"
+                :disabled="organizeSaving">
+                <i class="bi bi-check-lg"></i>保存
+              </button>
+              <span class="grow"></span>
+              <button type="button" class="btn btn-primary btn-sm" @click="runOrganizeNow"
+                :disabled="organizeRunning || !aiStatus.configured">
+                <span v-if="organizeRunning" class="spinner"></span>
+                <i v-else class="bi bi-play-fill"></i>立即整理
+              </button>
+            </div>
+
+            <div class="toolbar mt-20">
+              <span class="muted">待整理文件 <b>[[ organizeLoose.length ]]</b> 个<template
+                  v-if="organizeCachedCount > 0"> · 暂缓 [[ organizeCachedCount ]] 个</template></span>
+              <span class="grow"></span>
+              <button type="button" class="btn btn-ghost btn-sm" @click="resetOrganizeCache"
+                :disabled="organizeResetting" title="清空暂缓缓存，让全部散落文件重新参与整理">
+                <span v-if="organizeResetting" class="spinner"></span>
+                <i v-else class="bi bi-arrow-counterclockwise"></i>重新评估
+              </button>
+              <button type="button" class="btn btn-ghost btn-sm" @click="loadOrganizePreview" :disabled="organizeLoading">
+                <i class="bi bi-arrow-clockwise"></i>刷新
+              </button>
+            </div>
+            <div v-if="organizeLoading" class="loading-box">
+              <span class="spinner spinner-brand"></span><span>加载中…</span>
+            </div>
+            <div v-else-if="organizeLoose.length === 0" class="empty">
+              <i class="bi bi-check2-circle"></i>
+              <p>没有发现需要整理的散落文件</p>
+            </div>
+            <div v-else class="row-list mt-12">
+              <div v-for="item in organizeLoose" :key="item.path" class="row-item">
+                <div class="ri-main">
+                  <div class="ri-sub mono">[[ item.path ]]</div>
+                </div>
+                <div class="ri-actions" v-if="item.cached">
+                  <span class="chip chip-outline" title="AI 暂时无法判断归属，已暂缓，可用「重新评估」重新尝试">暂缓</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="toolbar mt-24">
+              <span class="muted">整理记录 <b>[[ organizeHistory.length ]]</b> 条</span>
+              <span class="grow"></span>
+              <button type="button" class="btn btn-ghost btn-sm" @click="loadOrganizeHistory"
+                :disabled="organizeHistoryLoading">
+                <i class="bi bi-arrow-clockwise"></i>刷新
+              </button>
+            </div>
+            <div v-if="organizeHistory.length === 0" class="empty">
+              <i class="bi bi-inbox"></i><p>暂无自动整理记录</p>
+            </div>
+            <div v-else class="history-grid mt-12">
+              <article v-for="(record, index) in organizeHistory" :key="index" class="history-card"
+                :class="record.status === 'error' ? 'err' : 'ok'">
+                <div class="hcard-head">
+                  <div class="hcard-title">
+                    <i class="bi"
+                      :class="record.status === 'error' ? 'bi-x-circle text-danger' : 'bi-check-circle text-success'"></i>
+                    <span>整理 #[[ organizeHistory.length - index ]]</span>
+                    <span class="chip chip-ai"><i class="bi bi-magic"></i>AI</span>
+                  </div>
+                  <span class="chip chip-outline"><i class="bi bi-calendar3"></i>[[ formatDate(record.timestamp) ]]</span>
+                </div>
+                <div class="hcard-body">
+                  <template v-if="record.status !== 'error'">
+                    <div class="metric-grid mt-12">
+                      <div class="metric"><div class="n">[[ record.moved || record.renamed || 0 ]]</div><div class="t">已移动</div></div>
+                      <div class="metric"><div class="n">[[ record.skipped || 0 ]]</div><div class="t">已跳过</div></div>
+                      <div class="metric"><div class="n">[[ record.failed || 0 ]]</div><div class="t">失败</div></div>
+                    </div>
+                    <div class="result-extra">
+                      <button type="button" class="btn btn-ghost btn-sm" @click="showOrganizeResult(record)">
+                        <i class="bi bi-eye"></i>查看明细
+                      </button>
+                    </div>
+                  </template>
+                  <div v-else class="note note-danger">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <span><b>错误：</b>[[ record.message ]]</span>
+                  </div>
+                </div>
+              </article>
             </div>
           </div>
           <div class="modal-foot">

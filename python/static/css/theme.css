@@ -158,9 +158,12 @@ button { cursor: pointer; background: none; border: none; }
 .mt-12 { margin-top: 12px; }
 .mt-16 { margin-top: 16px; }
 .mt-20 { margin-top: 20px; }
+.mt-24 { margin-top: 24px; }
 .mb-12 { margin-bottom: 12px; }
 .mb-16 { margin-bottom: 16px; }
+.ml-16 { margin-left: 16px; }
 .grow { flex: 1 1 220px; min-width: 0; }
+.divider { height: 1px; background: var(--line); }
 
 /* ---------- buttons ---------- */
 .btn {
@@ -271,7 +274,8 @@ button { cursor: pointer; background: none; border: none; }
   font-size: 13px;
   line-height: 1.5;
 }
-.note i { margin-top: 1px; font-size: 1.1em; }
+.note i { flex-shrink: 0; margin-top: 1px; font-size: 1.1em; }
+.note > span { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
 .note-danger { background: var(--danger-soft); color: var(--danger); border-color: var(--danger-line); }
 .note-warning { background: var(--warning-soft); color: var(--warning); border-color: var(--warning-line); }
 .note-success { background: var(--success-soft); color: var(--success); border-color: var(--success-line); }

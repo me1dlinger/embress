@@ -201,6 +201,18 @@ class ConfigDB:
             """
         )
         self._add_column_if_missing("ai_binding", "provider_id INTEGER")
+        # change_record 增加 original_dir 列，记录整理前文件所在目录，用于还原
+        self._add_column_if_missing("change_record", "original_dir TEXT")
+
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS app_setting (
+                key TEXT PRIMARY KEY,
+                value TEXT,
+                updated_time TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+        )
         conn.commit()
 
     def _init_change_record_table(self):
@@ -399,6 +411,22 @@ class ConfigDB:
         cursor.execute("SELECT count(*) FROM scan_history;")
         return cursor.fetchone()[0]
 
+    def get_organize_history(self, limit: int = 20):
+        """仅返回 AI 自动整理的执行历史"""
+        conn, cursor = self._get_connection()
+        cursor.execute(
+            "SELECT data FROM scan_history WHERE scan_type = 'organize' "
+            "ORDER BY timestamp DESC LIMIT ?;",
+            (int(limit),),
+        )
+        history = []
+        for (row,) in cursor.fetchall():
+            try:
+                history.append(json.loads(row))
+            except json.JSONDecodeError:
+                pass
+        return history
+
     def get_last_scan_result(self):
         conn, cursor = self._get_connection()
         cursor.execute("SELECT data FROM scan_history ORDER BY timestamp DESC LIMIT 1;")
@@ -452,7 +480,8 @@ class ConfigDB:
                         continue
                     cursor.execute(
                         "UPDATE change_record SET new = ?, status = ?, error = ?, "
-                        "timestamp = ?, rollback = ?, source = COALESCE(?, source) "
+                        "timestamp = ?, rollback = ?, source = COALESCE(?, source), "
+                        "original_dir = COALESCE(?, original_dir) "
                         "WHERE id = ?;",
                         (
                             record.get("new"),
@@ -461,6 +490,7 @@ class ConfigDB:
                             datetime.now().isoformat(),
                             1 if record.get("rollback") else 0,
                             record.get("source"),
+                            record.get("original_dir"),
                             row[0],
                         ),
                     )
@@ -469,8 +499,8 @@ class ConfigDB:
                         """
                         INSERT INTO change_record
                         (path, original, new, type, status, error, timestamp, media_type,
-                        show_name, season_name, rollback, season_dir, source)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        show_name, season_name, rollback, season_dir, source, original_dir)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             path,
@@ -486,6 +516,7 @@ class ConfigDB:
                             1 if record.get("rollback") else 0,
                             record.get("season_dir"),
                             record.get("source", "regex"),
+                            record.get("original_dir"),
                         ),
                     )
             conn.commit()
@@ -502,7 +533,8 @@ class ConfigDB:
                 COUNT(*) as record_count,
                 MAX(timestamp) as latest_timestamp,
                 GROUP_CONCAT(DISTINCT type) as types,
-                MAX(CASE WHEN source = 'ai' THEN 1 ELSE 0 END) as ai
+                MAX(CASE WHEN source IN ('ai', 'ai-organize') THEN 1 ELSE 0 END) as ai,
+                MAX(CASE WHEN source = 'ai-organize' THEN 1 ELSE 0 END) as organize
             FROM change_record 
             WHERE status = 'success'
             GROUP BY media_type,show_name
@@ -541,6 +573,46 @@ class ConfigDB:
 
         columns = [desc[0] for desc in cursor.description]
         records = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        return records
+
+    def get_organize_change_records(
+        self,
+        media_type: str = None,
+        show_name: str = None,
+        season_name: str = None,
+        path: str = None,
+        only_active: bool = False,
+        limit: int = 1000,
+    ) -> List[Dict]:
+        """查询 AI 整理产生的变更记录，支持按剧集/季/单个文件过滤"""
+        sql = (
+            "SELECT path, original, new, type, status, timestamp, media_type, show_name, "
+            "season_name, rollback, season_dir, source, original_dir "
+            "FROM change_record WHERE type = 'organize' AND status = 'success'"
+        )
+        params: List = []
+        if only_active:
+            sql += " AND rollback = 0"
+        if path:
+            sql += " AND path = ?"
+            params.append(path)
+        elif media_type and show_name:
+            sql += " AND media_type = ? AND show_name = ?"
+            params.extend([media_type, show_name])
+            if season_name:
+                sql += " AND season_name = ?"
+                params.append(season_name)
+        sql += " ORDER BY timestamp DESC LIMIT ?"
+        params.append(int(limit))
+
+        conn, cursor = self._get_connection()
+        cursor.execute(sql, tuple(params))
+        columns = [desc[0] for desc in cursor.description]
+        records = []
+        for row in cursor.fetchall():
+            record = dict(zip(columns, row))
+            record["rollback"] = bool(record.get("rollback"))
+            records.append(record)
         return records
 
     def record_exists(
@@ -764,6 +836,24 @@ class ConfigDB:
         cursor.execute("DELETE FROM ai_provider WHERE id = ?;", (provider_id,))
         conn.commit()
         return cursor.rowcount > 0
+
+    # ========= 通用设置 ========= #
+    def get_setting(self, key: str, default: Optional[str] = None) -> Optional[str]:
+        conn, cursor = self._get_connection()
+        cursor.execute("SELECT value FROM app_setting WHERE key = ?;", (key,))
+        row = cursor.fetchone()
+        return row[0] if row else default
+
+    def set_setting(self, key: str, value: str):
+        conn, cursor = self._get_connection()
+        cursor.execute(
+            "INSERT INTO app_setting (key, value, updated_time) "
+            "VALUES (?, ?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value, "
+            "updated_time = excluded.updated_time;",
+            (key, str(value), datetime.now().isoformat()),
+        )
+        conn.commit()
 
     def close(self):
         if hasattr(self._local, "conn"):
