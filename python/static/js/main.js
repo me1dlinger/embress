@@ -289,6 +289,16 @@ new Vue({
         (this.organizeResult.milestones || []).length > 0
       );
     },
+    organizeRunId() {
+      const result = this.organizeResult;
+      if (!result || !result.run_id) return null;
+      return result.run_id;
+    },
+    organizeRecordsScoped() {
+      const result = this.organizeResult;
+      if (!result) return false;
+      return (result.items || []).length > 0 || !!result.path;
+    },
     organizeRecordGroups() {
       const groups = {};
       this.organizeRecords.forEach((record) => {
@@ -726,16 +736,49 @@ new Vue({
     async loadOrganizeRecords() {
       this.organizeRecordsLoading = true;
       try {
-        const data = await this.auth_fetch("/api/organize/records");
-        this.organizeRecords = data.records || [];
+        const runId = this.organizeRunId;
+        const url = runId
+          ? `/api/organize/records?run_id=${encodeURIComponent(runId)}`
+          : "/api/organize/records";
+        const data = await this.auth_fetch(url);
+        this.organizeRecords = runId
+          ? data.records || []
+          : this.filterLegacyRecords(data.records || []);
       } catch (error) {
         this.organizeRecords = [];
       } finally {
         this.organizeRecordsLoading = false;
       }
     },
+    // 历史遗留数据（没有 run_id）无法按任务筛选，退化为按本次结果的文件路径匹配
+    filterLegacyRecords(records) {
+      const result = this.organizeResult;
+      if (!result) return records;
+      const normalize = (value) => String(value || "").replace(/\\/g, "/");
+      const targets = new Set();
+      (result.items || []).forEach((item) => {
+        if (item && item.to) targets.add(normalize(item.to));
+      });
+      if (targets.size) {
+        return records.filter((record) => {
+          return (
+            targets.has(normalize(record.relative_path || record.path)) ||
+            targets.has(normalize(record.path))
+          );
+        });
+      }
+      if (result.path) {
+        // 从「变更记录」直接打开单条旧记录时，仅展示该条
+        return records.filter((record) => normalize(record.path) === normalize(result.path));
+      }
+      // 整理运行结果但没有成功变更：本次没有变更记录
+      return this.organizeResultIsRun ? [] : records;
+    },
     async restoreOrganize(scope, show, season, record) {
       const payload = { scope };
+      if (this.organizeRunId) {
+        payload.run_id = this.organizeRunId;
+      }
       let label = "该剧集";
       if (scope === "file") {
         payload.path = record.path;

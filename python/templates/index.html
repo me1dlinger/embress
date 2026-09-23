@@ -1270,7 +1270,7 @@
               </template>
 
               <div class="toolbar mt-24">
-                <span class="muted">整理变更与还原 <b>[[ organizeRecords.length ]]</b> 条</span>
+                <span class="muted">[[ organizeResultIsRun ? '本次整理变更' : '整理变更' ]]与还原 <b>[[ organizeRecords.length ]]</b> 条</span>
                 <span class="grow"></span>
                 <span class="muted" v-if="organizeRecordsActiveCount">可还原 [[ organizeRecordsActiveCount ]] 条</span>
                 <button type="button" class="btn btn-ghost btn-sm" @click="loadOrganizeRecords"
@@ -1282,7 +1282,8 @@
                 <span class="spinner spinner-brand"></span><span>加载中…</span>
               </div>
               <div v-else-if="organizeRecords.length === 0" class="empty">
-                <i class="bi bi-inbox"></i><p>暂无 AI 整理变更记录</p>
+                <i class="bi bi-inbox"></i>
+                <p>[[ organizeRecordsScoped ? '本次整理没有可展示的变更记录' : '暂无 AI 整理变更记录' ]]</p>
               </div>
               <div v-else>
                 <div v-for="(show, showKey) in organizeRecordGroups" :key="showKey" class="og-group">

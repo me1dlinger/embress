@@ -174,6 +174,9 @@ class ConfigDB:
         # change_record 增加 source 列（regex / ai），用于区分重命名来源
         self._add_column_if_missing("change_record", "source TEXT DEFAULT 'regex'")
 
+        # change_record 增加 run_id 列，标记该变更属于哪一轮 AI 整理，用于按整理任务筛选/还原
+        self._add_column_if_missing("change_record", "run_id TEXT")
+
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS ai_binding (
@@ -481,7 +484,8 @@ class ConfigDB:
                     cursor.execute(
                         "UPDATE change_record SET new = ?, status = ?, error = ?, "
                         "timestamp = ?, rollback = ?, source = COALESCE(?, source), "
-                        "original_dir = COALESCE(?, original_dir) "
+                        "original_dir = COALESCE(?, original_dir), "
+                        "run_id = COALESCE(?, run_id) "
                         "WHERE id = ?;",
                         (
                             record.get("new"),
@@ -491,6 +495,7 @@ class ConfigDB:
                             1 if record.get("rollback") else 0,
                             record.get("source"),
                             record.get("original_dir"),
+                            record.get("run_id"),
                             row[0],
                         ),
                     )
@@ -499,8 +504,9 @@ class ConfigDB:
                         """
                         INSERT INTO change_record
                         (path, original, new, type, status, error, timestamp, media_type,
-                        show_name, season_name, rollback, season_dir, source, original_dir)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        show_name, season_name, rollback, season_dir, source, original_dir,
+                        run_id)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             path,
@@ -517,6 +523,7 @@ class ConfigDB:
                             record.get("season_dir"),
                             record.get("source", "regex"),
                             record.get("original_dir"),
+                            record.get("run_id"),
                         ),
                     )
             conn.commit()
@@ -581,13 +588,14 @@ class ConfigDB:
         show_name: str = None,
         season_name: str = None,
         path: str = None,
+        run_id: str = None,
         only_active: bool = False,
         limit: int = 1000,
     ) -> List[Dict]:
-        """查询 AI 整理产生的变更记录，支持按剧集/季/单个文件过滤"""
+        """查询 AI 整理产生的变更记录，支持按剧集/季/单个文件/整理任务 ID 过滤"""
         sql = (
             "SELECT path, original, new, type, status, timestamp, media_type, show_name, "
-            "season_name, rollback, season_dir, source, original_dir "
+            "season_name, rollback, season_dir, source, original_dir, run_id "
             "FROM change_record WHERE type = 'organize' AND status = 'success'"
         )
         params: List = []
@@ -602,6 +610,9 @@ class ConfigDB:
             if season_name:
                 sql += " AND season_name = ?"
                 params.append(season_name)
+        if run_id:
+            sql += " AND run_id = ?"
+            params.append(run_id)
         sql += " ORDER BY timestamp DESC LIMIT ?"
         params.append(int(limit))
 

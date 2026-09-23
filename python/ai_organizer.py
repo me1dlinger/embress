@@ -15,6 +15,7 @@ import re
 import shutil
 import time
 import urllib.error
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -564,9 +565,13 @@ class AutoOrganizer:
             )
 
         files = self.collect_loose_files()
+        # 每次整理生成唯一的任务 ID：变更记录以此归属到具体某一轮整理，
+        # 前端按 ID 查看/还原，避免通过文件路径集合间接推断范围。
+        run_id = f"{datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:6]}"
         result = {
             "status": "completed",
             "scan_type": "organize",
+            "run_id": run_id,
             "processed": len(files),
             "renamed": 0,
             "moved": 0,
@@ -660,18 +665,19 @@ class AutoOrganizer:
             }
         )
         self._remember_attempts(files, exclude=self._retryable_paths(records))
-        recorded = self._persist_change_records(records)
+        recorded = self._persist_change_records(records, run_id)
         mark("program", "写入变更记录", f"已记录 {recorded} 条整理变更，可在变更记录中查看或还原")
         self.logger.info(
             "智能整理完成：移动 %d，跳过 %d，失败 %d", moved, skipped, failed
         )
         return result
 
-    def _persist_change_records(self, records: List[Dict]) -> int:
+    def _persist_change_records(self, records: List[Dict], run_id: str = None) -> int:
         """把成功的整理动作写入变更记录，使其出现在「变更记录」中并标注来源
 
         类型使用 organize 而非 rename，回滚逻辑只处理 rename，因此不会误触发回滚。
         同时记录原文件所在目录，便于后续按剧集/季/片名精准还原。
+        run_id 标记这些变更属于哪一轮整理，前端据此筛选与还原。
         """
         change_records = []
         for record in records:
@@ -682,6 +688,7 @@ class AutoOrganizer:
             change_records.append(
                 {
                     "path": str(target_path.absolute()),
+                    "run_id": run_id,
                     "original": Path(record["from"]).name,
                     "new": target_path.name,
                     "type": "organize",
@@ -723,11 +730,17 @@ class AutoOrganizer:
         show_name: str = None,
         season_name: str = None,
         path: str = None,
+        run_id: str = None,
     ) -> Dict:
-        """还原 AI 整理结果：scope 支持 show（按剧集）/ season（按季）/ file（按片名）"""
+        """还原 AI 整理结果：scope 支持 show（按剧集）/ season（按季）/ file（按片名）
+
+        run_id 用于把还原范围限制在某一轮整理产生的变更上（整理明细里还原时传入）。
+        """
         try:
             with _operation_guard():
-                return self._do_restore(scope, media_type, show_name, season_name, path)
+                return self._do_restore(
+                    scope, media_type, show_name, season_name, path, run_id
+                )
         except OperationBusy as exc:
             return {
                 "success": False,
@@ -739,20 +752,23 @@ class AutoOrganizer:
             }
 
     def _do_restore(
-        self, scope: str, media_type: str, show_name: str, season_name: str, path: str
+        self,
+        scope: str,
+        media_type: str,
+        show_name: str,
+        season_name: str,
+        path: str,
+        run_id: str = None,
     ) -> Dict:
         if scope == "file":
             records = config_db.get_organize_change_records(path=path, only_active=True)
-        elif scope == "season":
+        elif scope in ("season", "show"):
             records = config_db.get_organize_change_records(
                 media_type=media_type,
                 show_name=show_name,
-                season_name=season_name,
+                season_name=season_name if scope == "season" else None,
+                run_id=run_id,
                 only_active=True,
-            )
-        elif scope == "show":
-            records = config_db.get_organize_change_records(
-                media_type=media_type, show_name=show_name, only_active=True
             )
         else:
             return {

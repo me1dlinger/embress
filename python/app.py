@@ -717,7 +717,9 @@ def organize_records():
     """返回 AI 整理产生的变更记录（含已还原），用于详情展示与还原操作"""
     try:
         media_root = Path(MEDIA_PATH).resolve()
-        records = config_db.get_organize_change_records(limit=500)
+        records = config_db.get_organize_change_records(
+            run_id=request.args.get("run_id"), limit=500
+        )
         for record in records:
             try:
                 record["relative_path"] = str(
@@ -763,6 +765,7 @@ def restore_organize():
             show_name=data.get("show_name"),
             season_name=data.get("season_name"),
             path=data.get("path"),
+            run_id=data.get("run_id"),
         )
         return jsonify(result)
     except Exception as exc:
