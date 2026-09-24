@@ -1,10 +1,17 @@
 FROM python:3.9-slim
 
-# 在 sources.list 中补全 security 源
-RUN echo "deb https://mirrors.tuna.tsinghua.edu.cn/debian/ bullseye main contrib non-free non-free-firmware" > /etc/apt/sources.list && \
-  echo "deb https://mirrors.tuna.tsinghua.edu.cn/debian/ bullseye-updates main contrib non-free non-free-firmware" >> /etc/apt/sources.list && \
-  echo "deb https://mirrors.tuna.tsinghua.edu.cn/debian/ bullseye-backports main contrib non-free non-free-firmware" >> /etc/apt/sources.list && \
-  echo "deb https://mirrors.tuna.tsinghua.edu.cn/debian-security bullseye-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list
+# 将基础镜像自带的 Debian 源替换为清华镜像
+# 不写死发行版代号（bullseye/bookworm 均可），也不改动组件列表，
+# 同时兼容传统 /etc/apt/sources.list 与 bookworm 的 deb822 格式
+RUN set -eux; \
+  for f in /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources; do \
+    if [ -f "$f" ]; then \
+      sed -i \
+        -e 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g' \
+        -e 's|security.debian.org|mirrors.tuna.tsinghua.edu.cn|g' \
+        "$f"; \
+    fi; \
+  done
 
 # 安装依赖
 RUN apt-get update && apt-get install -y \
