@@ -60,6 +60,7 @@ new Vue({
     organizeResetting: false,
     showOrganizeResultModal: false,
     showOrganizeTimeline: false,
+    showOrganizeUnprocessed: false,
     organizeResult: null,
     organizeRecords: [],
     organizeRecordsLoading: false,
@@ -67,7 +68,8 @@ new Vue({
 
     // 系统状态
     systemStatus: null,
-    statusLoading: false,
+    // 初始即为加载中：避免 F5 后、首次请求发出前先闪出矮小的空状态导致布局抖动
+    statusLoading: true,
     lastScanResult: null,
     lastEffectScanResult: null,
 
@@ -288,6 +290,12 @@ new Vue({
         this.organizeResult.scan_type === "organize" ||
         (this.organizeResult.milestones || []).length > 0
       );
+    },
+    // 本次整理中未成功（跳过/失败）的文件：不会写入变更记录，单独展示
+    organizeUnprocessedItems() {
+      const result = this.organizeResult;
+      if (!result || !this.organizeResultIsRun) return [];
+      return (result.items || []).filter((item) => item && item.status !== "success");
     },
     organizeRunId() {
       const result = this.organizeResult;
@@ -725,6 +733,7 @@ new Vue({
       if (!record) return;
       this.organizeResult = record;
       this.showOrganizeTimeline = false;
+      this.showOrganizeUnprocessed = false;
       this.showOrganizeResultModal = true;
       this.loadOrganizeRecords();
     },
@@ -732,6 +741,7 @@ new Vue({
       this.showOrganizeResultModal = false;
       this.organizeResult = null;
       this.showOrganizeTimeline = false;
+      this.showOrganizeUnprocessed = false;
     },
     async loadOrganizeRecords() {
       this.organizeRecordsLoading = true;
